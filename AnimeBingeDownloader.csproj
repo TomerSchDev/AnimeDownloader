@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net9.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UseWPF>true</UseWPF>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Add this line to use Windows Forms -->
+        <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+        <PackageReference Include="Selenium.WebDriver" Version="4.27.0" />
+        <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="131.0.6778.8500" />
+        <PackageReference Include="WebDriverManager" Version="2.17.6" />
+    </ItemGroup>
+    
+    
+
+</Project>
