@@ -27,11 +27,12 @@ public class TaskViewModel : INotifyPropertyChanged
         private readonly CancellationTokenSource _cancellationTokenSource = new();
         private ScrapingService? _scraper = null;
         public ObservableCollection<EpisodeTask> EpisodeTasks { get; } = new();
+        public readonly MegaLogger _megaLogger;
 
         public string StatusStr => EnumTranslator.TranslateEnumToStr(_status);
         public string PriorityStr => EnumTranslator.TranslateEnumToStr(_priority);
-
-        public TaskViewModel(string url, string directory)
+        public DateTime StartTime => _startTime;
+        public TaskViewModel(string url, string directory, MegaLogger megaLogger)
         {
             var s = Guid.NewGuid().ToString("N");
             if (s.Length >= 8) _id = s[..8];
@@ -47,7 +48,11 @@ public class TaskViewModel : INotifyPropertyChanged
             _elapsedTime = "--:--:--";
             _episodeErrors = [];
             _logger = new Logger($"[TASK {Id}] ");
+            _megaLogger = megaLogger;
+            _megaLogger.Subscribe(_logger);
             _logger.AddLog($"--- LOG FOR TASK {Id}: {Title} ---");
+           
+
         }
 
         #region Properties
@@ -222,6 +227,7 @@ public class TaskViewModel : INotifyPropertyChanged
         public void AddError(string episodeNumber)
         {
             _episodeErrors.Add(episodeNumber);
+            _episodesCompleted++;
             OnPropertyChanged(nameof(_episodeErrors));
         }
 
@@ -238,13 +244,19 @@ public class TaskViewModel : INotifyPropertyChanged
             UpdateStatus(TaskStatus.Canceled, "Cancellation requested.");
         }
 
-        public string GetFullLog()
+        public List<Logger> Loggers()
         {
             var loggers = EpisodeTasks
                 .Select(episode => episode.GetLogger())
                 .ToList();
+            if (_scraper is not null) loggers.Add(_scraper?.Logger!);
             loggers.Add(_logger);
-            var logs = Logger.GetMargeLoggers(loggers);
+            return loggers;
+        }
+        public string GetFullLog()
+        {
+            
+            var logs = Logger.GetMargeLoggers(Loggers());
             return string.Join(Environment.NewLine, logs);
         }
 
@@ -263,6 +275,7 @@ public class TaskViewModel : INotifyPropertyChanged
 
         public void AddEpisode(EpisodeTask episode)
         {
+            _megaLogger.Subscribe(episode.GetLogger());
             // CRITICAL: The Dispatcher ensures this code runs on the UI thread.
             if (Application.Current?.Dispatcher != null)
             {

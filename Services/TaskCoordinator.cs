@@ -11,7 +11,7 @@ namespace AnimeBingeDownloader.Services
         
 
         [Obsolete("Obsolete")]
-        public async Task ExecuteTaskAsync()
+        public async Task<bool> ExecuteTaskAsync()
         {
             task.UpdateStatus(TaskStatus.Running, "Task started.");
 
@@ -27,7 +27,7 @@ namespace AnimeBingeDownloader.Services
                         task.UpdateStatus(TaskStatus.Canceled, "Task was canceled by user.");
                     }
 
-                    return;
+                    return false;
                 }
 
                 // Update task with scraped info
@@ -60,6 +60,8 @@ namespace AnimeBingeDownloader.Services
             {
                 task.UpdateStatus(TaskStatus.Error, $"Task error: {ex.Message}");
             }
+
+            return true;
         }
 
         [Obsolete("Obsolete")]
@@ -67,7 +69,7 @@ namespace AnimeBingeDownloader.Services
         {
             task.UpdateStatus(TaskStatus.Scraping, "Starting scraping process...");
 
-            using var scraper = new ScrapingService(task.Id);
+            using var scraper = new ScrapingService(task.Id,task._megaLogger);
             task.AddScrapper(scraper);
             var result = await scraper.ScrapeLinksAsync(task,task.CancellationToken,this);
             task.CleanScrape();

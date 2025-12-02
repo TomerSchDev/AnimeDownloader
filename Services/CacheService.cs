@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows.Forms.VisualStyles;
 using AnimeBingeDownloader.Models;
+using AnimeBingeDownloader.Views;
 
 namespace AnimeBingeDownloader.Services
 {
@@ -14,9 +15,10 @@ namespace AnimeBingeDownloader.Services
         private Dictionary<string, CachedAnimeData>? _cachedAnimeData = null;
         private readonly Logger _logger = new("[CacheService] ");
         private readonly Lock _cacheLock = new Lock();
-
+        public static Logger Logger => Instance._logger;
         private CacheService()
         {
+            MainWindow.Logger.Subscribe(_logger);
             var cacheFilePath = AppStorageService.GetPath(CacheFileName);
             _cachedAnimeData=new Dictionary<string, CachedAnimeData>();
             if (!File.Exists(CacheFileName))

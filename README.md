@@ -7,7 +7,7 @@ A powerful WPF desktop application for downloading anime episodes from AnimeHeav
 ### Core Functionality
 - **Automated Episode Scraping** - Uses Selenium WebDriver to automatically discover and extract episode download links
 - **Smart Caching System** - Caches scraped episode links for 24 hours to minimize redundant scraping operations
-- **Multi-threaded Downloads** - Concurrent episode downloads with configurable worker threads for optimal performance
+- **Multithreaded Downloads** - Concurrent episode downloads with configurable worker threads for optimal performance
 - **Priority Queue Management** - Organize downloads with High/Medium/Low priorities and dynamic priority updates
 - **Resume Support** - Automatically resumes interrupted downloads from the exact point of interruption
 

@@ -11,12 +11,20 @@ using TaskStatus = AnimeBingeDownloader.Models.TaskStatus;
 
 namespace AnimeBingeDownloader.Services
 {
-    public class ScrapingService(string taskId) : IDisposable
+    public class ScrapingService : IDisposable
     {
         private IWebDriver? _driver = null;
         private const string AnimeTimePlaceholder = "AnimeHeavenVideo";
-        private readonly Logger _logger = new($"[ScrapingService] {taskId} ");
+        private readonly string taskId;
+        private readonly Logger _logger;
+        public Logger Logger => _logger;
 
+        public ScrapingService(string taskId, MegaLogger megaLogger)
+        {
+            this.taskId = taskId;
+            _logger = new($"[ScrapingService] [TASK {taskId}]");
+            megaLogger.Subscribe(_logger);
+        }
         [Obsolete("Obsolete")]
         public async Task<ScrapingResult> ScrapeLinksAsync(TaskViewModel task,CancellationToken cancellationToken,TaskCoordinator taskCoordinator)
         {

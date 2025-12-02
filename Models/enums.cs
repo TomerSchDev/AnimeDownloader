@@ -6,7 +6,7 @@ namespace AnimeBingeDownloader.Models
 {
     public static class EnumTranslator
     {
-        static string TranslateEnumToString(TaskStatus status)
+        private static string TranslateEnumToString(TaskStatus status)
         {
             return status switch
             {
@@ -24,7 +24,7 @@ namespace AnimeBingeDownloader.Models
             };
         }
 
-        static string TranslateEnumToString(EpisodeState status)
+        private static string TranslateEnumToString(EpisodeState status)
         {
             return status switch
             {
@@ -40,7 +40,7 @@ namespace AnimeBingeDownloader.Models
             };
         }
 
-        static string TranslateEnumToString(TaskPriority priority)
+        private static string TranslateEnumToString(TaskPriority priority)
         {
             return priority switch
             {
@@ -51,7 +51,7 @@ namespace AnimeBingeDownloader.Models
             };
         }
 
-        static string TranslateEnumToString(EpisodeDownloadResult result)
+        private static string TranslateEnumToString(EpisodeDownloadResult result)
         {
             return result switch
             {
@@ -78,6 +78,80 @@ namespace AnimeBingeDownloader.Models
                 // rather than the generic placeholder (T).
                 TranslateEnumToString((dynamic)enumValue);
         }
+
+        private static TaskPriority ParseTaskPriority(string str)
+        {
+            return str switch
+            {
+                "Low" => TaskPriority.Low,
+                "Medium" => TaskPriority.Medium,
+                "High" => TaskPriority.High,
+                _ => throw new ArgumentException($"Unknown TaskPriority string: {str}")
+            };
+        }
+        private static EpisodeDownloadResult ParseEpisodeDownloadResult(string str)
+        {
+            return str switch
+            {
+                "Completed" => EpisodeDownloadResult.Completed,
+                "Failed" => EpisodeDownloadResult.Failed,
+                "Skipped" => EpisodeDownloadResult.Skipped,
+                "Cancelled" => EpisodeDownloadResult.Cancelled,
+                "Partial" => EpisodeDownloadResult.Partial,
+                "Error" => EpisodeDownloadResult.Error,
+                _ => throw new ArgumentException($"Unknown EpisodeDownloadResult string: {str}")
+            };
+        }
+        private static EpisodeState ParseEpisodeState(string str)
+        {
+            return str switch
+            {
+                "Waiting For Link" => EpisodeState.WaitingForLink,
+                "Link Scraped" => EpisodeState.LinkScraped,
+                "Queued For Download" => EpisodeState.QueuedForDownload,
+                "Downloading" => EpisodeState.Downloading,
+                "Interrupted" => EpisodeState.Interrupted,
+                "Skipped" => EpisodeState.Skipped,
+                "Completed" => EpisodeState.Completed,
+                "Error" => EpisodeState.Error,
+                _ => throw new ArgumentException($"Unknown EpisodeState string: {str}")
+            };
+        }
+        private static TaskStatus ParseTaskStatus(string str)
+        {
+            return str switch
+            {
+                "Queued" => TaskStatus.Queued,
+                "Running" => TaskStatus.Running,
+                "Scraping" => TaskStatus.Scraping,
+                "Downloading" => TaskStatus.Downloading,
+                "Scraping and Downloading" => TaskStatus.ScrapingAndDownloading,
+                "Finished Scraping" => TaskStatus.FinishedScraping,
+                "Finished Scraping and Downloading" => TaskStatus.FinishedScrapingAndDownloads,
+                "Completed" => TaskStatus.Completed,
+                "Error" => TaskStatus.Error,
+                "Canceled" => TaskStatus.Canceled,
+                _ => throw new ArgumentException($"Unknown TaskStatus string: {str}")
+            };
+        }
+
+        public static Enum Parse<T>(T? enumType, string? statusString) where T :Enum
+        {
+            
+            if (string.IsNullOrEmpty(statusString) || enumType == null) throw new ArgumentException($"Unknown TaskPriority string: {statusString}");
+            return enumType switch
+            {
+                TaskPriority =>ParseTaskPriority(statusString),
+                TaskStatus => ParseTaskStatus(statusString),
+                EpisodeState=> ParseEpisodeState(statusString),
+                EpisodeDownloadResult => ParseEpisodeDownloadResult(statusString),
+                _ => throw new ArgumentException($"Unknown enum string: {enumType}")
+                
+
+            };
+
+        }
+        
     }
     
     public enum TaskStatus

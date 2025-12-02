@@ -15,23 +15,34 @@ namespace AnimeBingeDownloader.Views
         private readonly ObservableCollection<TaskViewModel> _tasks;
         private readonly Dictionary<string,TaskViewModel> _taskDictionary = new();
         private TaskViewModel? _selectedTask;
+        private readonly ConfigurationManager _configManager;
+        private readonly TaskHistoryManager _historyManager;
+        private string logCallBack;
+        public static MegaLogger Logger = new();
+        
 
         public MainWindow()
         {
             InitializeComponent();
             
+            // Initialize managers
+            _configManager = ConfigurationManager.Instance;
+            _historyManager = TaskHistoryManager.Instance;
+            
             // Initialize task collection
             _tasks = [];
             TaskDataGrid.ItemsSource = _tasks;
 
-            // Set default download directory
-            var defaultDownloadDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Downloads",
-                "AnimeHeaven"
-            );
-            DirectoryTextBox.Text = defaultDownloadDirectory;
-
+            // Set default download directory from configuration
+            DirectoryTextBox.Text = _configManager.DefaultDownloadDirectory;
+            List<Logger> loggers =
+            [
+                CacheService.Logger,
+                ConfigurationManager.Instance.Logger,
+                PeriodicCallerService.Instance.Logger,
+                TaskHistoryManager.Instance.Logger,
+            ];
+           
             // Start periodic UI update timer
             var updateTimer = new System.Windows.Threading.DispatcherTimer
             {
@@ -39,8 +50,26 @@ namespace AnimeBingeDownloader.Views
             };
             updateTimer.Tick += UpdateTimer_Tick;
             updateTimer.Start();
+            //logCallBack = PeriodicCallerService.Instance.AddNewCall(LogCallBack, null, 0, 1);
+
+            // Load previous session (optional - uncomment if you want to restore tasks)
+            // LoadPreviousSession();
         }
 
+        private void LogCallBack(object? o)
+        {
+            var logFile = ConfigurationManager.Instance.DefaulterLoggerFile;
+            var logs = string.Join(Environment.NewLine, Logger.GetNewSortedMegaLog());
+            File.WriteAllText(logFile, logs);
+        }
+
+        public void SaveHistory()
+        {
+            foreach (var task in _tasks)
+            {
+                _historyManager.SaveTask(task);
+            }
+        }
         #region Event Handlers - New Task Tab
 
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
@@ -51,10 +80,11 @@ namespace AnimeBingeDownloader.Views
                 Description = "Select download directory"
             };
 
-            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            {
-                DirectoryTextBox.Text = dialog.SelectedPath;
-            }
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            DirectoryTextBox.Text = dialog.SelectedPath;
+                
+            // Update default directory in config
+            _configManager.DefaultDownloadDirectory = dialog.SelectedPath;
         }
 
         private async void StartTaskButton_Click(object sender, RoutedEventArgs e)
@@ -74,20 +104,30 @@ namespace AnimeBingeDownloader.Views
             }
 
             // Create new task
-            var task = new TaskViewModel(url, directory);
+            var task = new TaskViewModel(url, directory,Logger);
             _tasks.Add(task);
             _taskDictionary.Add(task.Id, task);
+            
+            // Save to history immediately
+            _historyManager.SaveTask(task);
+            
             // Log message
             LogMessage($"Task {task.Id} started. Monitoring in Task Manager.");
 
             // Switch to Task Manager tab
             MainTabControl.SelectedIndex = 1;
-
+            
             // Start the task processing in background
             _ = Task.Run(async () =>
             {
                 var coordinator = new TaskCoordinator(task);
                 await coordinator.ExecuteTaskAsync();
+                
+                // Save to history when completed
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _historyManager.SaveTask(task);
+                });
             });
         }
 
@@ -111,7 +151,7 @@ namespace AnimeBingeDownloader.Views
         {
             if (_selectedTask == null ||TaskDataGrid.SelectedItem == null) return;
 
-            // 2. Toggle the visibility of the detail panel.
+            // Toggle the visibility of the detail panel.
             if (TaskDetailPanel.Visibility == Visibility.Visible)
             {
                 // Hide the panel on a second double-click.
@@ -124,7 +164,6 @@ namespace AnimeBingeDownloader.Views
                 var task = (TaskViewModel)selected;
                 TaskDetailPanel.ItemsSource = task.EpisodeTasks;
                 TaskDetailPanel.Visibility = Visibility.Visible;
-
             }
         }
 
@@ -145,6 +184,9 @@ namespace AnimeBingeDownloader.Views
             {
                 _selectedTask.Cancel();
                 LogMessage($"Cancellation requested for task {_selectedTask.Id}.");
+                
+                // Save updated state to history
+                _historyManager.SaveTask(_selectedTask);
             }
             else
             {
@@ -230,6 +272,9 @@ namespace AnimeBingeDownloader.Views
                 SetTaskPriority(TaskPriority.Pause);
                 _selectedTask.AddLog("Task PAUSED. Will be skipped by workers.");
             }
+            
+            // Save updated state
+            _historyManager.SaveTask(_selectedTask);
         }
 
         #endregion
@@ -308,6 +353,7 @@ namespace AnimeBingeDownloader.Views
 
             _selectedTask.Priority = newPriority;
             _selectedTask.AddLog($"Priority changed to {newPriority}.");
+            _selectedTask.UpdateTaskPriority();
         }
 
         private void UpdateLogView()
@@ -322,8 +368,8 @@ namespace AnimeBingeDownloader.Views
         private void LogMessage(string message)
         {
             // Global log message (shown in log tab)
-            string timestamp = DateTime.Now.ToString("HH:mm:ss");
-            string formattedMessage = $"[{timestamp}] [GLOBAL] {message}\n";
+            var timestamp = DateTime.Now.ToString("HH:mm:ss");
+            var formattedMessage = $"[{timestamp}] [GLOBAL] {message}\n";
             
             LogTextBox.AppendText(formattedMessage);
             LogTextBox.ScrollToEnd();
@@ -338,6 +384,12 @@ namespace AnimeBingeDownloader.Views
                 {
                     task.UpdateElapsedTime();
                 }
+                
+                // Periodically save running tasks to history
+                if (task.IsRunning && DateTime.Now.Second % 30 == 0)
+                {
+                    _historyManager.SaveTask(task);
+                }
             }
 
             // If viewing a task log, refresh it
@@ -346,14 +398,112 @@ namespace AnimeBingeDownloader.Views
                 UpdateLogView();
             }
         }
+        
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            // Save all tasks to history before closing
             foreach (var task in _tasks)
             {
                 task.CleanScrape();
+                _historyManager.SaveTask(task);
             }
+            
             DownloadService.Instance.Shutdown();
+            TaskHistoryManager.Instance.Close();
+            PeriodicCallerService.Instance.RemoveCall(logCallBack);
+            PeriodicCallerService.Instance.ClearCalls();
             base.OnClosing(e);
+        }
+
+        // Optional: Load previous session tasks
+        private void LoadPreviousSession()
+        {
+            var history = _historyManager.GetAllHistory();
+            var recentTasks = history.Take(10); // Load last 10 tasks
+            
+            // You can implement UI to show these and allow resuming
+            LogMessage($"Found {history.Count} tasks in history.");
+        }
+
+        #endregion
+
+        #region Menu Event Handlers
+
+        private void Settings_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = new SettingsWindow
+            {
+                Owner = this
+            };
+
+            if (settingsWindow.ShowDialog() != true) return;
+            // Settings were saved, update UI if needed
+            DirectoryTextBox.Text = _configManager.DefaultDownloadDirectory;
+            LogMessage("Settings updated successfully.");
+        }
+
+        private void ViewHistory_Click(object sender, RoutedEventArgs e)
+        {
+            var historyWindow = new HistoryWindow
+            {
+                Owner = this
+            };
+            
+            historyWindow.ShowDialog();
+        }
+
+        private void ExportHistory_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new SaveFileDialog
+            {
+                FileName = $"task_history_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                DefaultExt = ".json"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+            try
+            {
+                _historyManager.ExportHistory(dialog.FileName);
+                MessageBox.Show(
+                    $"History exported successfully to {dialog.FileName}",
+                    "Success",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Error exporting history: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
+        }
+
+        private void About_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Anime Downloader v1.0\n\n" +
+                "A powerful WPF application for downloading anime episodes.\n\n" +
+                "Features:\n" +
+                "• Multi-threaded downloads\n" +
+                "• Priority queue management\n" +
+                "• Smart caching\n" +
+                "• Resume support\n" +
+                "• Task history tracking\n\n" +
+                "For educational purposes only.",
+                "About Anime Downloader",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+        }
+
+        private void Exit_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
 
         #endregion

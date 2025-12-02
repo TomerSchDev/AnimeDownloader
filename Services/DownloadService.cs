@@ -59,7 +59,7 @@ namespace AnimeBingeDownloader.Services
                 while (!shutdownToken.IsCancellationRequested)
                 {
                     EpisodeTask episodeTask = null;
-                    bool acquiredConcurrency = false;
+                    var acquiredConcurrency = false;
                     
                     try
                     {
@@ -91,6 +91,16 @@ namespace AnimeBingeDownloader.Services
                         if (result != EpisodeDownloadResult.Completed)
                         {
                             var priority = parentTask.Priority;
+                            if (result == EpisodeDownloadResult.Error)
+                            {
+                                episodeTask.RetryCount++;
+                                if (episodeTask.RetryCount >= Configuration.RetryTimes)
+                                {
+                                    episodeTask.AddLog($"Got error retry too many times, removing");
+                                    parentTask.AddError(episodeTask.EpisodeNumber);
+                                    continue;
+                                }
+                            }
                             lock (_queueLock)
                             {
                                 _queue.Enqueue(episodeTask, priority);

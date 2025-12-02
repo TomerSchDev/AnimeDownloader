@@ -1,0 +1,188 @@
+﻿<Window x:Class="AnimeBingeDownloader.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" 
+        Height="500" Width="600"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" 
+                   Text="Application Settings" 
+                   FontSize="20" 
+                   FontWeight="Bold"
+                   Margin="0,0,0,20"/>
+
+        <!-- Settings Content -->
+        <ScrollViewer Grid.Row="1" 
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                
+                <!-- Download Settings Group -->
+                <GroupBox Header="Download Settings" 
+                          Margin="0,0,0,15"
+                          Padding="10">
+                    <StackPanel>
+                        
+                        <!-- Default Directory -->
+                        <Label Content="Default Download Directory:" 
+                               FontWeight="Bold"
+                               Margin="0,0,0,5"/>
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBox x:Name="DirectoryTextBox"
+                                     Grid.Column="0"
+                                     Padding="5"
+                                     VerticalAlignment="Center"/>
+                            
+                            <Button x:Name="BrowseButton"
+                                    Grid.Column="1"
+                                    Content="Browse"
+                                    Width="80"
+                                    Margin="5,0,0,0"
+                                    Click="BrowseButton_Click"/>
+                        </Grid>
+
+                        <!-- Max Concurrent Downloads -->
+                        <Label Content="Max Concurrent Downloads:" 
+                               FontWeight="Bold"
+                               Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <Slider x:Name="MaxDownloadsSlider"
+                                    Width="300"
+                                    Minimum="1"
+                                    Maximum="10"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center"
+                                    ValueChanged="MaxDownloadsSlider_ValueChanged"/>
+                            <TextBlock x:Name="MaxDownloadsLabel"
+                                       Text="5"
+                                       Width="30"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="Bold"/>
+                        </StackPanel>
+
+                        <!-- Max Retry Attempts -->
+                        <Label Content="Max Retry Attempts:" 
+                               FontWeight="Bold"
+                               Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <Slider x:Name="MaxRetriesSlider"
+                                    Width="300"
+                                    Minimum="1"
+                                    Maximum="10"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center"
+                                    ValueChanged="MaxRetriesSlider_ValueChanged"/>
+                            <TextBlock x:Name="MaxRetriesLabel"
+                                       Text="5"
+                                       Width="30"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="Bold"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Cache Settings Group -->
+                <GroupBox Header="Cache Settings" 
+                          Margin="0,0,0,15"
+                          Padding="10">
+                    <StackPanel>
+                        <!-- Cache Expiration -->
+                        <Label Content="Cache Expiration (Hours):" 
+                               FontWeight="Bold"
+                               Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Slider x:Name="CacheExpirationSlider"
+                                    Width="300"
+                                    Minimum="1"
+                                    Maximum="168"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center"
+                                    ValueChanged="CacheExpirationSlider_ValueChanged"/>
+                            <TextBlock x:Name="CacheExpirationLabel"
+                                       Text="24"
+                                       Width="40"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="Bold"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Browser Settings Group -->
+                <GroupBox Header="Browser Settings" 
+                          Margin="0,0,0,15"
+                          Padding="10">
+                    <StackPanel>
+                        <CheckBox x:Name="MinimizeBrowserCheckBox"
+                                  Content="Minimize browser window during scraping"
+                                  Margin="0,0,0,10"
+                                  Checked="SettingChanged"
+                                  Unchecked="SettingChanged"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- General Settings Group -->
+                <GroupBox Header="General Settings" 
+                          Margin="0,0,0,15"
+                          Padding="10">
+                    <StackPanel>
+                        <CheckBox x:Name="AutoStartDownloadsCheckBox"
+                                  Content="Automatically start downloads after scraping"
+                                  Margin="0,0,0,10"
+                                  Checked="SettingChanged"
+                                  Unchecked="SettingChanged"/>
+                        
+                        <CheckBox x:Name="ShowNotificationsCheckBox"
+                                  Content="Show notifications on task completion"
+                                  Margin="0,0,0,10"
+                                  Checked="SettingChanged"
+                                  Unchecked="SettingChanged"/>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Margin="0,20,0,0">
+            
+            <Button x:Name="ResetButton"
+                    Content="Reset to Defaults"
+                    Width="120"
+                    Margin="0,0,10,0"
+                    Click="ResetButton_Click"/>
+            
+            <Button x:Name="SaveButton"
+                    Content="Save"
+                    Width="80"
+                    Style="{StaticResource SuccessButton}"
+                    Margin="0,0,10,0"
+                    Click="SaveButton_Click"/>
+            
+            <Button x:Name="CancelButton"
+                    Content="Cancel"
+                    Width="80"
+                    Click="CancelButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
