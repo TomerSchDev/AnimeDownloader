@@ -19,11 +19,11 @@ namespace AnimeBingeDownloader.Services
         private readonly Logger _logger;
         public Logger Logger => _logger;
 
-        public ScrapingService(string taskId, MegaLogger megaLogger)
+        public ScrapingService(string taskId)
         {
             this.taskId = taskId;
-            _logger = new($"[ScrapingService] [TASK {taskId}]");
-            megaLogger.Subscribe(_logger);
+            _logger = new Logger($"[ScrapingService] [TASK {taskId}]");
+            Utils.AppLogger.MegaLogger.Subscribe(_logger);
         }
         [Obsolete("Obsolete")]
         public async Task<ScrapingResult> ScrapeLinksAsync(TaskViewModel task,CancellationToken cancellationToken,TaskCoordinator taskCoordinator)

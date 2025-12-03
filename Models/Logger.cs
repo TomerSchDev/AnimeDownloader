@@ -1,22 +1,45 @@
-﻿using AnimeBingeDownloader.Services;
+using AnimeBingeDownloader.Models;
 
 namespace AnimeBingeDownloader.Models;
 
-public class Logger(string prefix)
+public class Logger
 {
     private readonly List<LogMessage> _logMessages = [];
     private IEnumerable<LogMessage> LogRecords => _logMessages;
-    internal delegate void LogAddedEventHandler(LogMessage newLog);
+    private readonly string _prefix;
+    private LogLevel _minLogLevel = LogLevel.Info;
     
-    // The actual event that listeners will subscribe to
+    internal delegate void LogAddedEventHandler(LogMessage newLog);
     internal event LogAddedEventHandler? LogAdded = null!;
-    internal string Prefix => prefix;
-    public void AddLog(string message)
+    
+    public string Prefix => _prefix;
+    
+    public Logger(string prefix)
     {
-        var logMessage = new LogMessage(message, DateTime.Now);
+        _prefix = prefix;
+    }
+    
+    public void SetMinimumLogLevel(LogLevel level)
+    {
+        _minLogLevel = level;
+    }
+    
+    public void AddLog(string message, LogLevel level = LogLevel.Info)
+    {
+        if (level < _minLogLevel)
+            return;
+            
+        var logMessage = new LogMessage($"[{level}] {message}", DateTime.Now, level);
         _logMessages.Add(logMessage);
         LogAdded?.Invoke(logMessage);
     }
+    
+    public void Trace(string message) => AddLog(message, LogLevel.Trace);
+    public void Debug(string message) => AddLog(message, LogLevel.Debug);
+    public void Info(string message) => AddLog(message, LogLevel.Info);
+    public void Warning(string message) => AddLog(message, LogLevel.Warning);
+    public void Error(string message) => AddLog(message, LogLevel.Error);
+    public void Critical(string message) => AddLog(message, LogLevel.Critical);
 
     
     public static List<string> GetMargeLoggers(List<Logger>?loggers)
@@ -53,9 +76,9 @@ public class Logger(string prefix)
             .ToList();
     }
 
-    internal static string FormatLogMessage(LogMessage logMessage,string prefix)
+    internal static string FormatLogMessage(LogMessage logMessage, string prefix)
     {
-        return $"[{logMessage.Time}] {prefix} {logMessage.Log}";
+        return $"[{logMessage.Time}] [{logMessage.Level}] {prefix} {logMessage.Log}";
     }
 }
 
@@ -73,17 +96,36 @@ public class MegaLogger
         // The logger.Prefix is accessible because the Logger's prefix field
         // is likely available (or can be accessed via a property in the wrapper).
     }
+    public void Subscribe(Logger logger,bool isToPrintToScreen)
+    {
+        _enableConsoleOutput = isToPrintToScreen;
+        // Subscribe the HandleNewLog method to the logger's LogAdded event
+        logger.LogAdded += (newLog) => HandleNewLog(newLog, logger.Prefix);
 
+        // The logger.Prefix is accessible because the Logger's prefix field
+        // is likely available (or can be accessed via a property in the wrapper).
+    }
+    private bool _enableConsoleOutput = true;  // Default to true for initialization
+    
     private void HandleNewLog(LogMessage newLog, string prefix)
     {
-        // IMPORTANT: Access to the shared list MUST be synchronized
-        // (This assumes the prefix is accessible or stored in the ObservableLogger)
-        if (ConfigurationManager.Instance.PrintToScreen)
+        try
         {
-            var formatedMessage = Logger.FormatLogMessage(newLog, prefix);
-            Console.WriteLine(formatedMessage);
+            // Format the message first as it's needed in both console and storage
+            var formattedMessage = Logger.FormatLogMessage(newLog, prefix);
+            
+            // Safe console output that won't throw if ConfigurationManager isn't ready
+            if (_enableConsoleOutput)
+            {
+                Console.WriteLine(formattedMessage);
+            }
         }
-
+        catch
+        {
+            // If anything goes wrong with logging to console, just continue with storage
+        }
+        
+        // Always store the log, even if console output fails
         lock (_megaAllLogMessages)
         {
             _megaAllLogMessages.Add(newLog);
@@ -94,15 +136,18 @@ public class MegaLogger
         {
             _megaNewLogMessages.Add(newLog);
         }
-
     }
 
+    public void UpdatePrintLogs(bool toPrint)
+    {
+        _enableConsoleOutput = toPrint;
+    }
     public List<string> GetAllSortedMegaLog()
     {
         // 1. Retrieve and format logs with their prefixes
         var allLogs = _megaAllLogMessages.Select(log => new
         {
-            FormattedLog = $"[{log.Time}] {_prefixMap[log]} {log.Log}",
+            FormattedLog = $"[{log.Time}] [{log.Level}] {_prefixMap[log]} {log.Log}",
             LogTime = log.Time
         });
 
@@ -120,7 +165,7 @@ public class MegaLogger
         {
             var allLogs = _megaNewLogMessages.Select(log => new
             {
-                FormattedLog = $"[{log.Time}] {_prefixMap[log]} {log.Log}",
+                FormattedLog = $"[{log.Time}] [{log.Level}] {_prefixMap[log]} {log.Log}",
                 LogTime = log.Time
             });
 
@@ -138,8 +183,9 @@ public class MegaLogger
 };
 
 internal record LoggerData(string Prefix, IEnumerable<LogMessage> LogRecords);
-internal record LogMessage(string Log,DateTime Time)
+internal record LogMessage(string Log,DateTime Time, LogLevel Level)
 {
     public readonly string Log = Log;
     public readonly DateTime Time = Time;
+    public readonly LogLevel Level = Level;
 };

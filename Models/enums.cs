@@ -51,6 +51,19 @@ namespace AnimeBingeDownloader.Models
             };
         }
 
+        private static string TranslateEnumToString(LogLevel level)
+        {
+            return level switch
+            {
+                LogLevel.Info => "Info",
+                LogLevel.Trace => "Trace",
+                LogLevel.Debug => "Debug",
+                LogLevel.Critical => "Critical",
+                LogLevel.Warning => "Warning",
+                _ => "Unknown"
+            };
+        }
+
         private static string TranslateEnumToString(EpisodeDownloadResult result)
         {
             return result switch
@@ -134,6 +147,18 @@ namespace AnimeBingeDownloader.Models
                 _ => throw new ArgumentException($"Unknown TaskStatus string: {str}")
             };
         }
+        private static LogLevel ParseLogLevel(string str)
+        {
+            return str switch
+            {
+                "Info" => LogLevel.Info,
+                "Trace" => LogLevel.Trace,
+                "Warning" => LogLevel.Warning,
+                "Error" => LogLevel.Error,
+                "Critical" => LogLevel.Critical,
+                _ => throw new ArgumentException($"Unknown LogLevel string: {str}")
+            };
+        } 
 
         public static Enum Parse<T>(T? enumType, string? statusString) where T :Enum
         {
@@ -145,6 +170,7 @@ namespace AnimeBingeDownloader.Models
                 TaskStatus => ParseTaskStatus(statusString),
                 EpisodeState=> ParseEpisodeState(statusString),
                 EpisodeDownloadResult => ParseEpisodeDownloadResult(statusString),
+                LogLevel => ParseLogLevel(statusString),
                 _ => throw new ArgumentException($"Unknown enum string: {enumType}")
                 
 
@@ -153,7 +179,15 @@ namespace AnimeBingeDownloader.Models
         }
         
     }
-    
+    public enum LogLevel
+    {
+        Trace,
+        Debug,
+        Info,
+        Warning,
+        Error,
+        Critical
+    }
     public enum TaskStatus
     {
         Queued,

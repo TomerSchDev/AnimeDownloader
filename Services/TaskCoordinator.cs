@@ -69,7 +69,7 @@ namespace AnimeBingeDownloader.Services
         {
             task.UpdateStatus(TaskStatus.Scraping, "Starting scraping process...");
 
-            using var scraper = new ScrapingService(task.Id,task._megaLogger);
+            using var scraper = new ScrapingService(task.Id);
             task.AddScrapper(scraper);
             var result = await scraper.ScrapeLinksAsync(task,task.CancellationToken,this);
             task.CleanScrape();

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using AnimeBingeDownloader.Models;
 using AnimeBingeDownloader.Views;
@@ -10,15 +10,14 @@ public class TaskHistoryManager
 {
     public static TaskHistoryManager Instance { get; } = new();
     private readonly Dictionary<string,TaskHistoryEntry> _history = new();
-    private readonly Logger _logger = new("TaskHistoryManager");
-    public Logger Logger => _logger;
+    public Logger Logger { get; } = new("TaskHistoryManager");
 
     private bool _updatedFlag = false;
-    private string _exportCall;
+    private readonly string _exportCall;
 
     private TaskHistoryManager()
     {
-        MainWindow.Logger.Subscribe(_logger);
+        Utils.AppLogger.MegaLogger.Subscribe(Logger);
         LoadHistory(null);
         _exportCall = PeriodicCallerService.Instance.AddNewCall(PeriodicExport, null,1000,5000);;
         
@@ -31,7 +30,7 @@ public class TaskHistoryManager
     public List<TaskHistoryEntry> GetHistoryByStatus(TaskStatus status)
     {
         List<TaskHistoryEntry> ret = [];
-        ret.AddRange(_history.Values.Where(item => item.getStatus() == status));
+        ret.AddRange(_history.Values.Where(item => item._taskStatus == status));
         return ret;
     }
 
@@ -43,40 +42,73 @@ public class TaskHistoryManager
     public void ClearHistory()
     {
         _history.Clear();
+        var filePath = AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
+        if (!File.Exists(filePath))
+        {
+            Logger.AddLog($"No history file found at {filePath}");
+            return;
+        }
+        File.Delete(filePath);
+        Logger.AddLog("Removed old history");
+
     }
 
     public bool DeleteTask(string entryId)
     {
         if (_history.Remove(entryId))
         {
-            _logger.AddLog($"Removed entry {entryId}");
+            Logger.AddLog($"Removed entry {entryId}");
             return true;
         }
-        _logger.AddLog("No task found with id " + entryId);
+        Logger.AddLog("No task found with id " + entryId);
         return false;
 
     }
 
-    public void LoadHistory(string? filePath)
+    private void LoadHistory(string? filePath)
     {
-        filePath ??= AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
-        if (!File.Exists(filePath))
+        try
         {
-            _logger.AddLog($"No task found with path {filePath}");
-            return;
+            filePath ??= AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
+            Logger.AddLog($"Loading history from: {filePath}");
+            
+            if (!File.Exists(filePath))
+            {
+                Logger.AddLog($"No history file found at {filePath}");
+                return;
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            var jsonString = File.ReadAllText(filePath);
+            var historyEntries = JsonSerializer.Deserialize<Dictionary<string, TaskHistoryEntry>>(jsonString, jsonOptions);
+
+            if (historyEntries == null || historyEntries.Count == 0)
+            {
+                Logger.AddLog("No valid history data found in the file");
+                return;
+            }
+
+            _history.Clear();
+            foreach (var entry in historyEntries)
+            {
+                if (entry.Value != null && !string.IsNullOrEmpty(entry.Key))
+                {
+                    _history[entry.Key] = entry.Value;
+                }
+            }
+            
+            Logger.AddLog($"Successfully loaded {_history.Count} history entries");
         }
-        var fileData = File.ReadAllText(filePath);
-        var temp =
-            JsonSerializer.Deserialize<Dictionary<string, TaskHistoryEntry>>(fileData);
-        if (temp == null || temp.Count == 0)
+        catch (Exception ex)
         {
-            _logger.AddLog($"No history found in path " + filePath);
-            return;
-        }
-        _history.Clear();
-        foreach (var id  in temp.Keys)
-        {
-            _history[id]=temp[id];
+            Logger.AddLog($"Error loading history: {ex.Message}");
+            // Optionally rethrow or handle the error as needed
         }
     }
     public void SaveTask(TaskViewModel task)
@@ -89,14 +121,54 @@ public class TaskHistoryManager
     private void PeriodicExport(object? o)
     {
         if (!_updatedFlag) return;
-        var path = ConfigurationManager.Instance.DefaulterHistoryFIle;
-        ExportHistory(path);
-        _updatedFlag = false;
+        
+        try
+        {
+            var path = AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
+            var directory = Path.GetDirectoryName(path);
+            
+            // Ensure directory exists
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+            
+            var jsonString = JsonSerializer.Serialize(_history, jsonOptions);
+            File.WriteAllText(path, jsonString);
+            
+            _updatedFlag = false;
+            Logger.AddLog($"History saved to {path}");
+        }
+        catch (Exception ex)
+        {
+            Logger.AddLog($"Error saving history: {ex.Message}");
+        }
     }
 
-    public void ExportHistory(string dialogFileName)
+    public void ExportHistory(string filePath)
     {
-       var j = JsonSerializer.Serialize(_history);
-       File.WriteAllTextAsync(dialogFileName, j);
+        try
+        {
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+            
+            var jsonString = JsonSerializer.Serialize(_history, jsonOptions);
+            File.WriteAllText(filePath, jsonString);
+            Logger.AddLog($"History exported to {filePath}");
+        }
+        catch (Exception ex)
+        {
+            Logger.AddLog($"Error exporting history: {ex.Message}");
+            throw; // Re-throw to allow caller to handle the error
+        }
     }
 }

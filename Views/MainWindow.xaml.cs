@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,8 +17,7 @@ namespace AnimeBingeDownloader.Views
         private TaskViewModel? _selectedTask;
         private readonly ConfigurationManager _configManager;
         private readonly TaskHistoryManager _historyManager;
-        private string logCallBack;
-        public static MegaLogger Logger = new();
+        public static MegaLogger Logger => Utils.AppLogger.MegaLogger;
         
 
         public MainWindow()
@@ -35,14 +34,6 @@ namespace AnimeBingeDownloader.Views
 
             // Set default download directory from configuration
             DirectoryTextBox.Text = _configManager.DefaultDownloadDirectory;
-            List<Logger> loggers =
-            [
-                CacheService.Logger,
-                ConfigurationManager.Instance.Logger,
-                PeriodicCallerService.Instance.Logger,
-                TaskHistoryManager.Instance.Logger,
-            ];
-           
             // Start periodic UI update timer
             var updateTimer = new System.Windows.Threading.DispatcherTimer
             {
@@ -87,7 +78,8 @@ namespace AnimeBingeDownloader.Views
             _configManager.DefaultDownloadDirectory = dialog.SelectedPath;
         }
 
-        private async void StartTaskButton_Click(object sender, RoutedEventArgs e)
+        [Obsolete("Obsolete")]
+        private void StartTaskButton_Click(object sender, RoutedEventArgs e)
         {
             var url = UrlTextBox.Text.Trim();
             var directory = DirectoryTextBox.Text.Trim();
@@ -104,7 +96,7 @@ namespace AnimeBingeDownloader.Views
             }
 
             // Create new task
-            var task = new TaskViewModel(url, directory,Logger);
+            var task = new TaskViewModel(url, directory);
             _tasks.Add(task);
             _taskDictionary.Add(task.Id, task);
             
@@ -410,7 +402,7 @@ namespace AnimeBingeDownloader.Views
             
             DownloadService.Instance.Shutdown();
             TaskHistoryManager.Instance.Close();
-            PeriodicCallerService.Instance.RemoveCall(logCallBack);
+            //PeriodicCallerService.Instance.RemoveCall(logCallBack);
             PeriodicCallerService.Instance.ClearCalls();
             base.OnClosing(e);
         }
@@ -441,16 +433,7 @@ namespace AnimeBingeDownloader.Views
             DirectoryTextBox.Text = _configManager.DefaultDownloadDirectory;
             LogMessage("Settings updated successfully.");
         }
-
-        private void ViewHistory_Click(object sender, RoutedEventArgs e)
-        {
-            var historyWindow = new HistoryWindow
-            {
-                Owner = this
-            };
-            
-            historyWindow.ShowDialog();
-        }
+        
 
         private void ExportHistory_Click(object sender, RoutedEventArgs e)
         {
@@ -504,6 +487,26 @@ namespace AnimeBingeDownloader.Views
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private void SettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = new SettingsWindow
+            {
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            settingsWindow.ShowDialog();
+        }
+
+        private void HistoryButton_Click(object sender, RoutedEventArgs e)
+        {
+            var historyWindow = new HistoryWindow
+            {
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            historyWindow.ShowDialog();
         }
 
         #endregion

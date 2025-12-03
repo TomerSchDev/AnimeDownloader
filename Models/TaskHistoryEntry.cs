@@ -1,24 +1,52 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
+using System.Text.Json;
 
 namespace AnimeBingeDownloader.Models;
 
-public class TaskHistoryEntry
-    : INotifyPropertyChanged
+public class TaskHistoryEntry : INotifyPropertyChanged
 {
-    private string _id;
-    private string _title;
+    [JsonPropertyName("id")]
+    public string _id { get; set; } = string.Empty;
     
-    private int _episodesCompleted = 0;
-    private int _episodesFound = 0;
-    private TimeSpan _elapsedTime;
-    public TaskPriority _priority;
-    private readonly DateTime _startTime;
-    private TaskStatus _Status {get; set; }
-    public string Url { get; } 
+    [JsonPropertyName("title")]
+    public string _title { get; set; } = string.Empty;
+    
+    [JsonPropertyName("episodesCompleted")]
+    public int _episodesCompleted { get; set; }
+    
+    [JsonPropertyName("episodesFound")]
+    public int _episodesFound { get; set; }
+    
+    [JsonPropertyName("elapsedTime")]
+    public TimeSpan _elapsedTime { get; set; }
+    
+    [JsonPropertyName("priority")]
+    public TaskPriority _taskPriority { get; set; }
+    
+    [JsonPropertyName("startTime")]
+    public DateTime _startTime { get; set; }
+    
+    [JsonPropertyName("status")]
+    public TaskStatus _taskStatus { get; set; }
+    
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = string.Empty;
+    
+    [JsonPropertyName("directory")]
     public string? Directory { get; set; }
 
-    public TaskHistoryEntry(TaskViewModel task)
+
+    // Parameterless constructor for JSON deserialization
+    [JsonConstructor]
+    public TaskHistoryEntry()
+    {
+        _id = Guid.NewGuid().ToString();
+        _startTime = DateTime.Now;
+    }
+    
+    public TaskHistoryEntry(TaskViewModel task) : this()
     {
         _id = task.Id;
         _title = task.Title;
@@ -26,90 +54,26 @@ public class TaskHistoryEntry
         _episodesFound = task.EpisodesFound;
         _startTime = task.StartTime;
         _elapsedTime = DateTime.Now - task.StartTime;
-        _priority = task.Priority;
-        _Status = task.Status;
+        _taskPriority = task.Priority;
+        _taskStatus = task.Status;
         Directory = task.Directory;
         Url = task.Url;
     }
-    public string Id
-    {
-        get => _id;
-        set
-        {
-            _id = value;
-            OnPropertyChanged();
-        }
-    }
+    
+    
 
     public void UpdateTime()
     {
         _elapsedTime = DateTime.Now - _startTime ;
+        OnPropertyChanged(nameof(_elapsedTime));
     }
 
-    public string Priority => EnumTranslator.TranslateEnumToStr(_priority);
-
-    public void UpdateEpisodesFound(int episodesFound)
+    
+    // Method to create a copy of the entry
+    public TaskHistoryEntry Clone()
     {
-        _episodesFound = episodesFound;
+        return (TaskHistoryEntry)this.MemberwiseClone();
     }
-
-    public void UpdateEpisodesCompleted(int episodesCompleted)
-    {
-        _episodesCompleted = episodesCompleted;
-    }
-    public string Title
-    {
-        get => _title;
-        set
-        {
-            _title = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public int EpisodesCompleted
-    {
-        get => _episodesCompleted;
-        set
-        {
-            _episodesCompleted = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public int EpisodesFound
-    {
-        get => _episodesFound;
-        set
-        {
-            _episodesFound = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public TaskPriority GetPriority()
-    {
-        return _priority;
-    }
-    public void SetPriority(TaskPriority priority)
-    {
-        _priority = priority;
-        OnPropertyChanged(nameof(_priority));
-        OnPropertyChanged(nameof(Priority));
-    }
-
-    public void SetStatus(TaskStatus status)
-    {
-        _Status = status;
-        OnPropertyChanged(nameof(_Status));
-        OnPropertyChanged(nameof(Status));
-    }
-
-    public TaskStatus getStatus()
-    {
-        return _Status;
-    }
-    public string Status => EnumTranslator.TranslateEnumToStr(_Status);
 
     #region INotifyPropertyChanged
 

@@ -32,7 +32,7 @@ public class TaskViewModel : INotifyPropertyChanged
         public string StatusStr => EnumTranslator.TranslateEnumToStr(_status);
         public string PriorityStr => EnumTranslator.TranslateEnumToStr(_priority);
         public DateTime StartTime => _startTime;
-        public TaskViewModel(string url, string directory, MegaLogger megaLogger)
+        public TaskViewModel(string url, string directory)
         {
             var s = Guid.NewGuid().ToString("N");
             if (s.Length >= 8) _id = s[..8];
@@ -48,8 +48,7 @@ public class TaskViewModel : INotifyPropertyChanged
             _elapsedTime = "--:--:--";
             _episodeErrors = [];
             _logger = new Logger($"[TASK {Id}] ");
-            _megaLogger = megaLogger;
-            _megaLogger.Subscribe(_logger);
+            Utils.AppLogger.MegaLogger.Subscribe(_logger);
             _logger.AddLog($"--- LOG FOR TASK {Id}: {Title} ---");
            
 
@@ -275,7 +274,7 @@ public class TaskViewModel : INotifyPropertyChanged
 
         public void AddEpisode(EpisodeTask episode)
         {
-            _megaLogger.Subscribe(episode.GetLogger());
+            Utils.AppLogger.MegaLogger.Subscribe(episode.GetLogger());
             // CRITICAL: The Dispatcher ensures this code runs on the UI thread.
             if (Application.Current?.Dispatcher != null)
             {

@@ -1,45 +1,147 @@
-﻿using System.Collections.ObjectModel;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Threading;
 using AnimeBingeDownloader.Models;
 using AnimeBingeDownloader.Services;
+using AnimeBingeDownloader.Views.Converters;
 using TaskStatus = AnimeBingeDownloader.Models.TaskStatus;
 
 namespace AnimeBingeDownloader.Views
 {
-    public partial class HistoryWindow : Window
+    public partial class HistoryWindow : Window, INotifyPropertyChanged
     {
         private readonly TaskHistoryManager _historyManager;
         private readonly ObservableCollection<TaskHistoryEntry> _displayedHistory;
+        private readonly DispatcherTimer _updateTimer;
+        private string _currentFilter = "All";
+        
+        public event PropertyChangedEventHandler? PropertyChanged;
+        
+        protected virtual void OnPropertyChanged(string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
 
         public HistoryWindow()
         {
             InitializeComponent();
+            
             _historyManager = TaskHistoryManager.Instance;
             _displayedHistory = new ObservableCollection<TaskHistoryEntry>();
+            
+            // Set up the data binding
             HistoryDataGrid.ItemsSource = _displayedHistory;
             
+            // Set up the filter combobox
+            var statuses = new List<string> { "All" };
+            statuses.AddRange(Enum.GetValues(typeof(TaskStatus))
+                .Cast<TaskStatus>()
+                .Select(s => EnumTranslator.TranslateEnumToStr(s))
+                .Distinct()
+                .OrderBy(s => s));
+            
+            StatusFilterComboBox.ItemsSource = statuses;
+            StatusFilterComboBox.SelectedIndex = 0;
+            
+            // Set up the update timer
+            _updateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _updateTimer.Tick += UpdateTimer_Tick;
+            
+            // Initial load
             LoadHistory();
+        }
+        
+        private void UpdateTimer_Tick(object sender, EventArgs e)
+        {
+            // Update the elapsed time for all entries
+            foreach (var entry in _displayedHistory)
+            {
+                entry.UpdateTime();
+            }
+        }
+        
+        protected override void OnActivated(EventArgs e)
+        {
+            base.OnActivated(e);
+            _updateTimer.Start();
+        }
+        
+        protected override void OnDeactivated(EventArgs e)
+        {
+            base.OnDeactivated(e);
+            _updateTimer.Stop();
         }
 
         private void LoadHistory()
         {
-            var history = _historyManager.GetAllHistory();
-            _displayedHistory.Clear();
-            
-            foreach (var entry in history)
+            try
             {
-                _displayedHistory.Add(entry);
+                var history = _historyManager.GetAllHistory();
+                _displayedHistory.Clear();
+                
+                // Sort by start time (newest first)
+                var sortedHistory = history.OrderByDescending(h => h._startTime);
+                
+                foreach (var entry in sortedHistory)
+                {
+                    _displayedHistory.Add(entry);
+                }
+                
+                // Subscribe to property changes for live updates
+                foreach (var entry in _displayedHistory)
+                {
+                    entry.PropertyChanged += Entry_PropertyChanged;
+                }
+                
+                ApplyFilter();
             }
-            
-            UpdateStatusBar();
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading history: {ex.Message}");
+            }
+        }
+        
+        private void Entry_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            // If the status changed, we might need to update the filtered view
+            if (e.PropertyName == nameof(TaskHistoryEntry._taskStatus))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    ApplyFilter();
+                }), DispatcherPriority.Background);
+            }
         }
 
         private void UpdateStatusBar()
         {
-            StatusTextBlock.Text = $"Total entries: {_displayedHistory.Count}";
+            try
+            {
+                if (StatusTextBlock != null)
+                {
+                    var total = _displayedHistory?.Count ?? 0;
+                    var statusText = _currentFilter == "All" 
+                        ? $"Showing all {total} entries"
+                        : $"Showing {total} entries with status: {_currentFilter}";
+                    
+                    StatusTextBlock.Text = statusText;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error updating status bar: {ex.Message}");
+            }
         }
 
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -49,32 +151,57 @@ namespace AnimeBingeDownloader.Views
 
         private void StatusFilterComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            ApplyFilter();
+            if (IsLoaded) // Only apply filter if the window is loaded
+            {
+                ApplyFilter();
+            }
         }
 
         private void ApplyFilter()
         {
-            if (StatusFilterComboBox.SelectedItem is not ComboBoxItem selectedItem) return;
-            var filterText = selectedItem.Content.ToString();
-            List<TaskHistoryEntry> filteredHistory;
-
-            if (filterText == "All")
+            if (StatusFilterComboBox?.SelectedItem == null) return;
+            
+            _currentFilter = StatusFilterComboBox.SelectedItem.ToString();
+            
+            try
             {
-                filteredHistory = _historyManager.GetAllHistory();
+                IEnumerable<TaskHistoryEntry> filteredHistory;
+                
+                if (string.IsNullOrEmpty(_currentFilter) || _currentFilter == "All")
+                {
+                    filteredHistory = _historyManager.GetAllHistory();
+                }
+                else
+                {
+                    var status = (TaskStatus)EnumTranslator.Parse(TaskStatus.Completed, _currentFilter);
+                    filteredHistory = _historyManager.GetHistoryByStatus(status);
+                }
+                
+                // Get the current selection to restore it after update
+                var selectedItem = HistoryDataGrid.SelectedItem as TaskHistoryEntry;
+                
+                // Update the collection
+                _displayedHistory.Clear();
+                foreach (var entry in filteredHistory.OrderByDescending(h => h._startTime))
+                {
+                    _displayedHistory.Add(entry);
+                }
+                
+                // Restore selection if possible
+                if (selectedItem != null && _displayedHistory.Contains(selectedItem))
+                {
+                    HistoryDataGrid.SelectedItem = selectedItem;
+                    HistoryDataGrid.ScrollIntoView(selectedItem);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                var status = (TaskStatus) EnumTranslator.Parse(TaskStatus.Completed,filterText);
-                filteredHistory = _historyManager.GetHistoryByStatus(status);
+                Debug.WriteLine($"Error applying filter: {ex.Message}");
             }
-
-            _displayedHistory.Clear();
-            foreach (var entry in filteredHistory)
+            finally
             {
-                _displayedHistory.Add(entry);
+                UpdateStatusBar();
             }
-
-            UpdateStatusBar();
         }
 
         private void DeleteEntry_Click(object sender, RoutedEventArgs e)
@@ -82,14 +209,14 @@ namespace AnimeBingeDownloader.Views
             if (HistoryDataGrid.SelectedItem is TaskHistoryEntry entry)
             {
                 var result = MessageBox.Show(
-                    $"Are you sure you want to delete the entry for '{entry.Title}'?",
+                    $"Are you sure you want to delete the entry for '{entry._title}'?",
                     "Confirm Delete",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question
                 );
 
                 if (result != MessageBoxResult.Yes) return;
-                if (!_historyManager.DeleteTask(entry.Id)) return;
+                if (!_historyManager.DeleteTask(entry._id)) return;
                 _displayedHistory.Remove(entry);
                 UpdateStatusBar();
                         

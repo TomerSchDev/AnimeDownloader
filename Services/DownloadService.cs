@@ -20,16 +20,20 @@ namespace AnimeBingeDownloader.Services
         public static DownloadService Instance { get; } = new DownloadService();
 
         private readonly IndexedPriorityQueue<EpisodeTask, TaskPriority> _queue = new();
-        private readonly SemaphoreSlim _concurrencyLimiter = new SemaphoreSlim(Configuration.MaxWorkers, Configuration.MaxWorkers);
+        private readonly int MAXWORKERS = ConfigurationManager.Instance.MaxConcurrentDownloads;
+        private readonly SemaphoreSlim _concurrencyLimiter = new SemaphoreSlim(ConfigurationManager.Instance.MaxConcurrentDownloads,ConfigurationManager.Instance.MaxConcurrentDownloads);
         private readonly Lock _queueLock = new Lock();
         private readonly Task[] _workerTasks;
         private bool _workersStarted = false;
         private readonly Lock _startLock = new Lock();
         private readonly CancellationTokenSource _shutdownTokenSource = new CancellationTokenSource();
 
+        private readonly TimeSpan _errorWaitTime =
+            TimeSpan.FromSeconds(ConfigurationManager.Instance.MinTimeAfterError);
+
         private DownloadService()
         {
-            _workerTasks = new Task[Configuration.MaxWorkers];
+            _workerTasks = new Task[MAXWORKERS];
         }
 
         public void EnsureWorkersStarted()
@@ -40,7 +44,7 @@ namespace AnimeBingeDownloader.Services
             {
                 if (_workersStarted) return;
 
-                for (var i = 0; i < Configuration.MaxWorkers; i++)
+                for (var i = 0; i < MAXWORKERS; i++)
                 {
                     var workerId = i;
                     _workerTasks[i] = Task.Run(() => WorkersLoop(workerId));
@@ -78,7 +82,16 @@ namespace AnimeBingeDownloader.Services
                             await Task.Delay(100, shutdownToken);
                             continue;
                         }
-                        
+
+                        if (episodeTask.RetryCount > 0)
+                        {
+                            var lastTime = DateTime.Now - episodeTask.LastRetryTime;
+                            if (lastTime <_errorWaitTime )
+                            {
+                                Thread.Sleep((_errorWaitTime - lastTime).Value.Milliseconds);
+                            }
+                        }
+                            
                         var parentTask = episodeTask.GetParentTask();
                         
                         // Wait for available download slot
@@ -94,7 +107,8 @@ namespace AnimeBingeDownloader.Services
                             if (result == EpisodeDownloadResult.Error)
                             {
                                 episodeTask.RetryCount++;
-                                if (episodeTask.RetryCount >= Configuration.RetryTimes)
+                                episodeTask.LastRetryTime= DateTime.Now;
+                                if (episodeTask.RetryCount >= ConfigurationManager.Instance.MaxRetryAttempts)
                                 {
                                     episodeTask.AddLog($"Got error retry too many times, removing");
                                     parentTask.AddError(episodeTask.EpisodeNumber);

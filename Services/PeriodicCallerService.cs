@@ -11,7 +11,7 @@ public class PeriodicCallerService
 
     private PeriodicCallerService()
     {
-        MainWindow.Logger.Subscribe(_logger);
+        Utils.AppLogger.MegaLogger.Subscribe(_logger);
 
     }
     public string AddNewCall(TimerCallback callback,object? state,int dueTime,int period)
@@ -25,7 +25,8 @@ public class PeriodicCallerService
 
     public void RemoveCall(string callId)
     {
-        var call = PeriodicCalls[callId];
+        if(string.IsNullOrEmpty(callId)) return;
+        if (!PeriodicCalls.TryGetValue(callId, out var call)) return;
         _logger.AddLog($"Removed call {callId}");
         PeriodicCalls.Remove(callId);
         call.Dispose();
@@ -33,10 +34,15 @@ public class PeriodicCallerService
 
     public void ClearCalls()
     {
-        foreach (var call in PeriodicCalls.Keys)
+        lock (PeriodicCalls)
         {
-            RemoveCall(call);
+            foreach (var callId in PeriodicCalls.Keys)
+            {
+                PeriodicCalls[callId].Dispose();
+            }
+            PeriodicCalls.Clear();
         }
+       
         _logger.AddLog("Removed all the calls");
     }
         
