@@ -5,12 +5,13 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using AnimeBingeDownloader.Models;
 using AnimeBingeDownloader.Services;
+using AnimeBingeDownloader.Utils;
 using Microsoft.Win32;
 
 namespace AnimeBingeDownloader.Views
 {
     
-    public partial class MainWindow : Window
+    public partial class MainWindow
     {
         private readonly ObservableCollection<TaskViewModel> _tasks;
         private readonly Dictionary<string,TaskViewModel> _taskDictionary = new();
@@ -39,19 +40,8 @@ namespace AnimeBingeDownloader.Views
             {
                 Interval = TimeSpan.FromSeconds(1)
             };
-            updateTimer.Tick += UpdateTimer_Tick;
+            updateTimer.Tick += UpdateTimer_Tick!;
             updateTimer.Start();
-            //logCallBack = PeriodicCallerService.Instance.AddNewCall(LogCallBack, null, 0, 1);
-
-            // Load previous session (optional - uncomment if you want to restore tasks)
-            // LoadPreviousSession();
-        }
-
-        private void LogCallBack(object? o)
-        {
-            var logFile = ConfigurationManager.Instance.DefaulterLoggerFile;
-            var logs = string.Join(Environment.NewLine, Logger.GetNewSortedMegaLog());
-            File.WriteAllText(logFile, logs);
         }
 
         public void SaveHistory()
@@ -256,13 +246,13 @@ namespace AnimeBingeDownloader.Views
             {
                 // Resume
                 SetTaskPriority(TaskPriority.Medium);
-                _selectedTask.AddLog("Task resumed from PAUSE (set to MEDIUM priority).");
+                _selectedTask.AddLog("Task resumed from PAUSE (set to MEDIUM priority).",LogLevel.Debug);
             }
             else
             {
                 // Pause
                 SetTaskPriority(TaskPriority.Pause);
-                _selectedTask.AddLog("Task PAUSED. Will be skipped by workers.");
+                _selectedTask.AddLog("Task PAUSED. Will be skipped by workers.",LogLevel.Debug);
             }
             
             // Save updated state
@@ -344,7 +334,7 @@ namespace AnimeBingeDownloader.Views
             }
 
             _selectedTask.Priority = newPriority;
-            _selectedTask.AddLog($"Priority changed to {newPriority}.");
+            _selectedTask.AddLog($"Priority changed to {newPriority}.",LogLevel.Debug);
             _selectedTask.UpdateTaskPriority();
         }
 
@@ -404,6 +394,7 @@ namespace AnimeBingeDownloader.Views
             TaskHistoryManager.Instance.Close();
             //PeriodicCallerService.Instance.RemoveCall(logCallBack);
             PeriodicCallerService.Instance.ClearCalls();
+            NotificationService.Instance.Dispose();
             base.OnClosing(e);
         }
 
@@ -420,19 +411,6 @@ namespace AnimeBingeDownloader.Views
         #endregion
 
         #region Menu Event Handlers
-
-        private void Settings_Click(object sender, RoutedEventArgs e)
-        {
-            var settingsWindow = new SettingsWindow
-            {
-                Owner = this
-            };
-
-            if (settingsWindow.ShowDialog() != true) return;
-            // Settings were saved, update UI if needed
-            DirectoryTextBox.Text = _configManager.DefaultDownloadDirectory;
-            LogMessage("Settings updated successfully.");
-        }
         
 
         private void ExportHistory_Click(object sender, RoutedEventArgs e)
@@ -484,9 +462,18 @@ namespace AnimeBingeDownloader.Views
             );
         }
 
-        private void Exit_Click(object sender, RoutedEventArgs e)
+        private void TestNotificationButton_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            try
+            {
+                NotificationService.Instance.ShowTestNotification();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Logger.Error($"Error showing test notification: {ex.Message}");
+                MessageBox.Show($"Failed to show notification: {ex.Message}", "Notification Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)

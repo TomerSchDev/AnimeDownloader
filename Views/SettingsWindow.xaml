@@ -193,10 +193,114 @@
                                          Padding="5"
                                          TextChanged="SettingChanged"/>
                                 
-                                <Label Content="Page Load Timeout (seconds):" FontWeight="Bold" Margin="0,10,0,5"/>
-                                <TextBox x:Name="PageLoadTimeoutTextBox"
-                                         Padding="5"
-                                         TextChanged="SettingChanged"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Browser Type -->
+                                    <Label Content="Browser Type:" 
+                                           FontWeight="Bold" 
+                                           Margin="0,5"
+                                           VerticalAlignment="Center"
+                                           Grid.Row="0" Grid.Column="0"/>
+                                    <ComboBox x:Name="BrowserTypeComboBox"
+                                              SelectedIndex="0"
+                                              Margin="0,5"
+                                              Padding="5"
+                                              Grid.Row="0" Grid.Column="1"
+                                              SelectionChanged="SettingChanged"
+                                              ToolTip="Select the browser to use for web scraping">
+                                        <ComboBoxItem Content="Chrome" Tag="Chrome"/>
+                                        <ComboBoxItem Content="Firefox" Tag="Firefox"/>
+                                        <ComboBoxItem Content="Edge" Tag="Edge"/>
+                                    </ComboBox>
+
+                                    <!-- Headless Mode -->
+                                    <CheckBox x:Name="HeadlessModeCheckBox"
+                                              Content="Headless Mode"
+                                              Margin="0,10,0,5"
+                                              Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                              Checked="SettingChanged"
+                                              Unchecked="SettingChanged"
+                                              ToolTip="Run the browser in headless mode (no visible UI)"/>
+
+                                    <!-- Disable Images -->
+                                    <CheckBox x:Name="DisableImagesCheckBox"
+                                              Content="Disable Images"
+                                              Margin="0,5"
+                                              Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                              Checked="SettingChanged"
+                                              Unchecked="SettingChanged"
+                                              ToolTip="Disable loading images to improve performance"/>
+
+                                    <!-- Disable JavaScript -->
+                                    <CheckBox x:Name="DisableJavaScriptCheckBox"
+                                              Content="Disable JavaScript"
+                                              Margin="0,5"
+                                              Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                              Checked="SettingChanged"
+                                              Unchecked="SettingChanged"
+                                              ToolTip="Disable JavaScript (may break some websites)"/>
+
+                                    <!-- Page Load Timeout -->
+                                    <Label Content="Page Load Timeout (seconds):" 
+                                           FontWeight="Bold" 
+                                           Margin="0,5"
+                                           VerticalAlignment="Center"
+                                           Grid.Row="4" Grid.Column="0"/>
+                                    <Grid Grid.Row="4" Grid.Column="1" Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Slider x:Name="PageLoadTimeoutSlider"
+                                                Minimum="10"
+                                                Maximum="300"
+                                                TickFrequency="10"
+                                                IsSnapToTickEnabled="True"
+                                                ValueChanged="SettingChanged"
+                                                ToolTip="Maximum time to wait for a page to load"/>
+                                        <TextBlock Text="{Binding ElementName=PageLoadTimeoutSlider, Path=Value, StringFormat={}{0} s}"
+                                                   Margin="5,0,0,0"
+                                                   Grid.Column="1"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <!-- User Data Directory -->
+                                    <Label Content="User Data Directory:" 
+                                           FontWeight="Bold" 
+                                           Margin="0,5"
+                                           VerticalAlignment="Center"
+                                           Grid.Row="5" Grid.Column="0"/>
+                                    <Grid Grid.Row="5" Grid.Column="1" Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="UserDataDirTextBox"
+                                                 Text="{Binding UserDataDir, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="5"
+                                                 IsReadOnly="True"/>
+                                        <Button x:Name="BrowseUserDataDirButton"
+                                                Content="..."
+                                                Padding="10,2"
+                                                Margin="5,0,0,0"
+                                                Grid.Column="1"
+                                                Click="BrowseUserDataDirButton_Click"
+                                                ToolTip="Select directory to store browser user data"/>
+                                    </Grid>
+                                </Grid>
+                                
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>
@@ -215,25 +319,34 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <CheckBox x:Name="EnableFileLoggingCheckBox"
+                                              Grid.Row="0"
+                                              Content="Enable file logging"
+                                              Margin="0,10,0,10"
+                                              Checked="SettingChanged"
+                                              Unchecked="SettingChanged"/>
                                     
                                     <TextBox x:Name="LogFilePathTextBox"
+                                             Grid.Row="1"
                                              Grid.Column="0"
                                              Padding="5"
                                              TextChanged="SettingChanged"/>
                                     
                                     <Button x:Name="BrowseLogFileButton"
                                             Grid.Column="1"
+                                            Grid.Row="1"
                                             Content="Browse"
                                             Width="80"
                                             Margin="5,0,0,0"
                                             Click="BrowseLogFileButton_Click"/>
                                 </Grid>
                                 
-                                <CheckBox x:Name="EnableFileLoggingCheckBox"
-                                          Content="Enable file logging"
-                                          Margin="0,10,0,10"
-                                          Checked="SettingChanged"
-                                          Unchecked="SettingChanged"/>
+                                
                                 
                                 <Label Content="Max Log File Size (MB):" FontWeight="Bold" Margin="0,10,0,5"/>
                                 <Slider x:Name="MaxLogSizeSlider"

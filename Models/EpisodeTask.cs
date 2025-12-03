@@ -1,8 +1,9 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using AnimeBingeDownloader.Services;
 
 namespace AnimeBingeDownloader.Models;
 
@@ -76,7 +77,9 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
         }
     }
 
-    public EpisodeTask(string parentTaskId, string episodeNumber, string filePath, string animeName,string downloadLink, TaskViewModel parent)
+    private readonly NotificationService _notificationService;
+
+    public EpisodeTask(string parentTaskId, string episodeNumber, string filePath, string animeName, string downloadLink, TaskViewModel parent)
     {
         ParentTaskId = parentTaskId;
         EpisodeNumber = episodeNumber;
@@ -87,11 +90,35 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
         DownloadLink = downloadLink;
         Parent = parent;
         _logger = new Logger($"[TASK {ParentTaskId}] [EPISODE {episodeNumber}] ");
+        _notificationService = NotificationService.Instance;
     }
 
-    public void AddLog(string message)
+    public void AddLog(string message,LogLevel level)
     {
-        _logger.AddLog(message);
+        switch (level)
+        {
+            case LogLevel.Info:
+                _logger.Info(message);
+                break;
+            case LogLevel.Warning:
+                _logger.Warning(message);
+                break;
+            case LogLevel.Error:
+                _logger.Error(message);
+                break;
+            case LogLevel.Debug:
+                _logger.Debug(message);
+                break;
+            case LogLevel.Trace:
+                _logger.Trace(message);
+                break;
+            case LogLevel.Critical:
+                _logger.Critical(message);
+                break;
+            default:
+                _logger.Info(message);
+                break;
+        }
     }
     public Logger GetLogger() => _logger;
   
@@ -123,7 +150,7 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
 
         if (cancellationToken.IsCancellationRequested)
         {
-            AddLog($"{prefix} CANCELED: Skipping download before start.");
+            AddLog($"{prefix} CANCELED: Skipping download before start.",LogLevel.Warning);
             State = EpisodeState.Interrupted;
             return EpisodeDownloadResult.Cancelled;
         }
@@ -151,16 +178,16 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
                 // Try to resume
                 request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(downloadedSize, null);
                 mode = FileMode.Append;
-                AddLog($"{prefix} Resuming download from {downloadedSize} bytes.");
+                AddLog($"{prefix} Resuming download from {downloadedSize} bytes.",LogLevel.Info);
             }
             else
             {
                 File.Delete(fullPath);
-                AddLog($"{prefix} Found empty file, starting new download.");
+                AddLog($"{prefix} Found empty file, starting new download.",LogLevel.Info);
             }
         }
 
-        AddLog($"{prefix} Starting download for {fileName}...");
+        AddLog($"{prefix} Starting download for {fileName}...",LogLevel.Info);
         State = EpisodeState.Downloading;
         Parent.Status = Parent.Status switch
         {
@@ -198,14 +225,14 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
             // Already complete?
             if (totalSize > 0 && downloadedSize >= totalSize && State == EpisodeState.Completed)
             {
-                AddLog($"{prefix} File already exists and is complete. Skipping.");
+                AddLog($"{prefix} File already exists and is complete. Skipping.",LogLevel.Info);
                 return EpisodeDownloadResult.Completed;
             }
 
             // If server ignored Range and returns full content (200)
             if (mode == FileMode.Append && response.StatusCode == System.Net.HttpStatusCode.OK)
             {
-                AddLog($"{prefix} Server ignored resume request. Restarting from scratch.");
+                AddLog($"{prefix} Server ignored resume request. Restarting from scratch.",LogLevel.Debug);
                 downloadedSize = 0;
                 mode = FileMode.Create;
                 if (File.Exists(fullPath))
@@ -225,7 +252,7 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
                     downloadedSize += read;
                     DownloadedSize = downloadedSize;
                     if (!cancellationToken.IsCancellationRequested) continue;
-                    AddLog("Download aborted. cancelling.");
+                    AddLog("Download aborted. cancelling.",LogLevel.Info);
                     State = EpisodeState.Interrupted;
                     return EpisodeDownloadResult.Cancelled;
                     // Small optimization: you could throttle logs here if you want.
@@ -236,38 +263,42 @@ public sealed partial class EpisodeTask : INotifyPropertyChanged
 
             if (cancellationToken.IsCancellationRequested)
             {
-                AddLog($"{prefix} INTERRUPTED: Partial file saved ({downloadedSize} bytes).");
+                AddLog($"{prefix} INTERRUPTED: Partial file saved ({downloadedSize} bytes).",LogLevel.Debug);
                 State = EpisodeState.Interrupted;
                 return EpisodeDownloadResult.Cancelled;
             }
 
             if (isComplete)
             {
-                AddLog($"{prefix} Successfully downloaded and saved.");
+                var message = $"Downloaded {AnimeName} - Episode {EpisodeNumber}";
+                AddLog($"{prefix} Successfully downloaded and saved.", LogLevel.Info);
+                _notificationService.ShowNotification(message, NotificationType.Success);
                 State = EpisodeState.Completed;
                 Parent.EpisodesCompleted += 1;
                 return EpisodeDownloadResult.Completed;
             }
 
-            AddLog($"{prefix} Download ended unexpectedly at {downloadedSize}/{totalSize} bytes. Retrying.");
+            AddLog($"{prefix} Download ended unexpectedly at {downloadedSize}/{totalSize} bytes. Retrying.",LogLevel.Info);
             State = EpisodeState.Error;
             return EpisodeDownloadResult.Error;
         }
         catch (OperationCanceledException)
         {
-            AddLog($"{prefix} INTERRUPTED: Partial file saved.");
+            AddLog($"{prefix} INTERRUPTED: Partial file saved.",LogLevel.Debug);
             State = EpisodeState.Interrupted;
             return EpisodeDownloadResult.Error;
         }
         catch (HttpRequestException ex)
         {
-            AddLog($"{prefix} Request failed: {ex.Message}");
+            var errorMsg = $"Failed to download {AnimeName} - Episode {EpisodeNumber}: {ex.Message}";
+            AddLog($"{prefix} Request failed: {ex.Message}", LogLevel.Error);
+            _notificationService.ShowNotification(errorMsg, NotificationType.Error);
             State = EpisodeState.Error;
             return EpisodeDownloadResult.Error;
         }
         catch (Exception ex)
         {
-            AddLog($"{prefix} Critical error: {ex}");
+            AddLog($"{prefix} Critical error: {ex}",LogLevel.Error);
             State = EpisodeState.Error;
             return EpisodeDownloadResult.Error;
         }

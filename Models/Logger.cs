@@ -1,30 +1,25 @@
+using System.IO;
 using AnimeBingeDownloader.Models;
+using AnimeBingeDownloader.Services;
 
 namespace AnimeBingeDownloader.Models;
 
-public class Logger
+public class Logger(string prefix)
 {
     private readonly List<LogMessage> _logMessages = [];
     private IEnumerable<LogMessage> LogRecords => _logMessages;
-    private readonly string _prefix;
     private LogLevel _minLogLevel = LogLevel.Info;
     
     internal delegate void LogAddedEventHandler(LogMessage newLog);
-    internal event LogAddedEventHandler? LogAdded = null!;
+    internal event LogAddedEventHandler? LogAdded ;
     
-    public string Prefix => _prefix;
-    
-    public Logger(string prefix)
-    {
-        _prefix = prefix;
-    }
-    
+    public string Prefix => prefix;
     public void SetMinimumLogLevel(LogLevel level)
     {
         _minLogLevel = level;
     }
     
-    public void AddLog(string message, LogLevel level = LogLevel.Info)
+    private void AddLog(string message, LogLevel level = LogLevel.Info)
     {
         if (level < _minLogLevel)
             return;
@@ -87,6 +82,9 @@ public class MegaLogger
     private readonly List<LogMessage> _megaAllLogMessages = [];
     private readonly List<LogMessage> _megaNewLogMessages = [];
     private readonly Dictionary<LogMessage, string> _prefixMap = new();
+    private bool _enableFileOutput = false;
+    private string _logFileName;
+
 
     public void Subscribe(Logger logger)
     {
@@ -96,9 +94,12 @@ public class MegaLogger
         // The logger.Prefix is accessible because the Logger's prefix field
         // is likely available (or can be accessed via a property in the wrapper).
     }
-    public void Subscribe(Logger logger,bool isToPrintToScreen)
+    public void Subscribe(Logger logger,bool isToPrintToScreen,bool isToFile,string logFile)
     {
         _enableConsoleOutput = isToPrintToScreen;
+        _enableFileOutput = isToFile;
+        _logFileName = logFile;
+        
         // Subscribe the HandleNewLog method to the logger's LogAdded event
         logger.LogAdded += (newLog) => HandleNewLog(newLog, logger.Prefix);
 
@@ -106,41 +107,101 @@ public class MegaLogger
         // is likely available (or can be accessed via a property in the wrapper).
     }
     private bool _enableConsoleOutput = true;  // Default to true for initialization
-    
-    private void HandleNewLog(LogMessage newLog, string prefix)
+    private async void HandleNewLog(LogMessage newLog, string prefix)
     {
         try
         {
-            // Format the message first as it's needed in both console and storage
-            var formattedMessage = Logger.FormatLogMessage(newLog, prefix);
-            
-            // Safe console output that won't throw if ConfigurationManager isn't ready
-            if (_enableConsoleOutput)
+            try
             {
-                Console.WriteLine(formattedMessage);
+                // Format the log message with timestamp, log level, and prefix
+                var logEntry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{newLog.Level}] [{prefix}] {newLog.Log}\n";
+
+                // Output to console if enabled
+                if (_enableConsoleOutput)
+                {
+                    Console.Write(logEntry);
+                }
+            
+                // Write to file if enabled
+                if (_enableFileOutput && !string.IsNullOrEmpty(_logFileName))
+                {
+                    await WriteLogToFileAsync(logEntry);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the error to debug output
+                System.Diagnostics.Debug.WriteLine($"Error in HandleNewLog: {ex.Message}");
+            }
+        
+            // Always store the log, even if output fails
+            lock (_megaAllLogMessages)
+            {
+                _megaAllLogMessages.Add(newLog);
+                _prefixMap[newLog] = prefix;
+            }
+
+            lock (_megaNewLogMessages)
+            {
+                _megaNewLogMessages.Add(newLog);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // If anything goes wrong with logging to console, just continue with storage
-        }
-        
-        // Always store the log, even if console output fails
-        lock (_megaAllLogMessages)
-        {
-            _megaAllLogMessages.Add(newLog);
-            _prefixMap[newLog] = prefix;
-        }
-
-        lock (_megaNewLogMessages)
-        {
-            _megaNewLogMessages.Add(newLog);
+            // Log the error to debug output
+            System.Diagnostics.Debug.WriteLine($"Error in HandleNewLog: {ex.Message}");
         }
     }
+    private async Task WriteLogToFileAsync(string log)
+    {
+        if (string.IsNullOrEmpty(_logFileName) || !_enableFileOutput)
+            return;
 
+        var filePath = AppStorageService.GetPath(_logFileName);
+        try
+        {
+            // Check if log file exists and exceeds max size
+            var fileInfo = new FileInfo(filePath);
+            if (fileInfo.Exists)
+            {
+                // Get max size from configuration (in bytes)
+                var maxSizeBytes = ConfigurationManager.Instance.MaxLogSizeMb * 1024 * 1024;
+                
+                if (fileInfo.Length > maxSizeBytes)
+                {
+                    // Create backup of current log
+                    var backupPath = $"{filePath}.1";
+                    if (File.Exists(backupPath))
+                        File.Delete(backupPath);
+                    
+                    File.Move(filePath, backupPath);
+                }
+            }
+
+            // Ensure directory exists
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            // Append the log entry
+            await File.AppendAllTextAsync(filePath, log);
+        }
+        catch (Exception ex)
+        {
+            // If we can't write to the log file, at least write to debug output
+            System.Diagnostics.Debug.WriteLine($"Failed to write to log file {filePath}: {ex.Message}");
+        }
+    }
     public void UpdatePrintLogs(bool toPrint)
     {
         _enableConsoleOutput = toPrint;
+    }
+    public void UpdateFileOutput(bool toFile,string fileName)
+    {
+        _enableFileOutput = toFile;
+        _logFileName = fileName;
     }
     public List<string> GetAllSortedMegaLog()
     {
@@ -180,6 +241,7 @@ public class MegaLogger
         // 2. Sort by time and return the final strings
 
     }
+    
 };
 
 internal record LoggerData(string Prefix, IEnumerable<LogMessage> LogRecords);

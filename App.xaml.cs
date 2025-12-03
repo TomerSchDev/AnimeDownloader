@@ -1,5 +1,5 @@
-﻿
 using System.Windows;
+using AnimeBingeDownloader.Services;
 using MainWindow = AnimeBingeDownloader.Views.MainWindow;
 
 namespace AnimeBingeDownloader;
@@ -17,6 +17,14 @@ public partial class App : Application
         // Create and show the main window
         var mainApp = new MainWindow();
         mainApp.Show();
+        
+        // Handle application exit
+        Current.Exit += (s, args) =>
+        {
+            // Ensure NotificationService is properly disposed
+            var notificationService = NotificationService.Instance as IDisposable;
+            notificationService?.Dispose();
+        };
     }
     private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {

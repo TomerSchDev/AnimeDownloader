@@ -97,7 +97,7 @@ namespace AnimeBingeDownloader.Services
                 Directory.CreateDirectory(task.Directory);
             }
 
-            task.AddLog($"Download directory set to: {task.Directory}");
+            task.AddLog($"Download directory set to: {task.Directory}",LogLevel.Debug);
         }
         
 

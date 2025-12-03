@@ -1,4 +1,4 @@
-﻿using AnimeBingeDownloader.Views;
+using AnimeBingeDownloader.Views;
 
 namespace AnimeBingeDownloader.Models;
 
@@ -19,7 +19,7 @@ public class PeriodicCallerService
         var callId = Guid.NewGuid().ToString();
         var timer = new Timer(callback,state,dueTime,period);
         PeriodicCalls[callId] = timer;
-        _logger.AddLog($"Added new call {callId}, callback: {callback} with due time {dueTime} and period {period} ");
+        _logger.Info($"Added new call {callId}, callback: {callback} with due time {dueTime} and period {period} ");
         return callId;
     }
 
@@ -27,7 +27,7 @@ public class PeriodicCallerService
     {
         if(string.IsNullOrEmpty(callId)) return;
         if (!PeriodicCalls.TryGetValue(callId, out var call)) return;
-        _logger.AddLog($"Removed call {callId}");
+        _logger.Info($"Removed call {callId}");
         PeriodicCalls.Remove(callId);
         call.Dispose();
     }
@@ -43,7 +43,7 @@ public class PeriodicCallerService
             PeriodicCalls.Clear();
         }
        
-        _logger.AddLog("Removed all the calls");
+        _logger.Info("Removed all the calls");
     }
         
 }

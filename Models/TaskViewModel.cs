@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -9,7 +9,7 @@ using AnimeBingeDownloader.Services;
 
 namespace AnimeBingeDownloader.Models;
 
-public class TaskViewModel : INotifyPropertyChanged
+public sealed class TaskViewModel : INotifyPropertyChanged
     {
         private string _id = null!;
         private string _url;
@@ -25,9 +25,8 @@ public class TaskViewModel : INotifyPropertyChanged
         private readonly Logger _logger;
         private readonly List<string> _episodeErrors;
         private readonly CancellationTokenSource _cancellationTokenSource = new();
-        private ScrapingService? _scraper = null;
-        public ObservableCollection<EpisodeTask> EpisodeTasks { get; } = new();
-        public readonly MegaLogger _megaLogger;
+        private ScrapingService? _scraper;
+        public ObservableCollection<EpisodeTask> EpisodeTasks { get; } = [];
 
         public string StatusStr => EnumTranslator.TranslateEnumToStr(_status);
         public string PriorityStr => EnumTranslator.TranslateEnumToStr(_priority);
@@ -49,7 +48,7 @@ public class TaskViewModel : INotifyPropertyChanged
             _episodeErrors = [];
             _logger = new Logger($"[TASK {Id}] ");
             Utils.AppLogger.MegaLogger.Subscribe(_logger);
-            _logger.AddLog($"--- LOG FOR TASK {Id}: {Title} ---");
+            _logger.Info($"--- LOG FOR TASK {Id}: {Title} ---");
            
 
         }
@@ -126,9 +125,9 @@ public class TaskViewModel : INotifyPropertyChanged
             UpdateStatus(TaskStatus.Completed,"Finished Downloading all episodes");
             var endtime = DateTime.Now;
             var workTime = endtime - _startTime;
-            AddLog($"Task finished in {workTime}");
-            AddLog("-------------------------------");
-            AddLog($"Episodes that had errors: {_episodeErrors.Count}");
+            AddLog($"Task finished in {workTime}",LogLevel.Info);
+            AddLog("-------------------------------",LogLevel.Info);
+            AddLog($"Episodes that had errors: {_episodeErrors.Count}",LogLevel.Info);
             
 
         }
@@ -194,33 +193,91 @@ public class TaskViewModel : INotifyPropertyChanged
 
         #region Methods
 
-        public void AddLog(string message)
+
+        public void AddLog(string message, LogLevel logLevel)
         {
-           _logger.AddLog(message);
+            switch (logLevel)
+            {
+                case LogLevel.Trace:
+                    _logger.Trace(message);
+                    break;
+                case LogLevel.Debug:
+                    _logger.Debug(message);
+                    break;
+                case LogLevel.Info:
+                    _logger.Info(message);
+                    break;
+                case LogLevel.Error:
+                    _logger.Error(message);
+                    break;
+                case LogLevel.Warning:
+                    _logger.Warning(message);
+                    break;
+                case LogLevel.Critical:
+                    _logger.Critical(message);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(logLevel), logLevel, null);
+            }
         }
 
         public void UpdateStatus(TaskStatus newStatus, string? logMessage = null)
         {
+            var oldStatus = Status;
             Status = newStatus;
             
             if (!string.IsNullOrEmpty(logMessage))
             {
-                AddLog(logMessage);
+                _logger.Info(logMessage);
+            }
+
+            // Show notification for important status changes
+            if (newStatus != oldStatus)
+            {
+                var notificationService = NotificationService.Instance;
+                var notificationType = NotificationType.Info;
+                string message = $"{Title}: ";
+
+                switch (newStatus)
+                {
+                    case TaskStatus.Completed:
+                        message += "Task completed successfully!";
+                        notificationType = NotificationType.Success;
+                        break;
+                    case TaskStatus.Error:
+                        message += "Task encountered an error!";
+                        notificationType = NotificationType.Error;
+                        break;
+                    case TaskStatus.Canceled:
+                        message += "Task was canceled";
+                        notificationType = NotificationType.Warning;
+                        break;
+                    case TaskStatus.FinishedScrapingAndDownloads:
+                        message += "All episodes downloaded";
+                        notificationType = NotificationType.Success;
+                        break;
+                }
+
+                if (newStatus != oldStatus && notificationType != NotificationType.Info)
+                {
+                    notificationService.ShowNotification(message, notificationType);
+                }
             }
 
             if (!IsTerminalState) return;
+            
             var endTime = DateTime.Now;
             var elapsed = endTime - _startTime;
                 
-            AddLog($"Task Finished Scrapping ended at {endTime:HH:mm:ss}");
-            AddLog($"Total elapsed time: {elapsed:hh\\:mm\\:ss}");
-            AddLog("----------------------------------------");
-            AddLog($"Total errors episodes: {_episodeErrors.Count}");
+            _logger.Info($"Task Finished Scrapping ended at {endTime:HH:mm:ss}");
+            _logger.Info($@"Total elapsed time: {elapsed:hh\:mm\:ss}");
+            _logger.Info("----------------------------------------");
+            _logger.Info($"Total errors episodes: {_episodeErrors.Count}");
                 
             var errorEpisodes = _episodeErrors.Count > 0 
                 ? string.Join(", E", _episodeErrors) 
                 : "None";
-            AddLog($"Episodes with errors: {errorEpisodes}");
+            _logger.Info($"Episodes with errors: {errorEpisodes}");
         }
 
         public void AddError(string episodeNumber)
@@ -243,7 +300,7 @@ public class TaskViewModel : INotifyPropertyChanged
             UpdateStatus(TaskStatus.Canceled, "Cancellation requested.");
         }
 
-        public List<Logger> Loggers()
+        private List<Logger> Loggers()
         {
             var loggers = EpisodeTasks
                 .Select(episode => episode.GetLogger())
@@ -265,7 +322,7 @@ public class TaskViewModel : INotifyPropertyChanged
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

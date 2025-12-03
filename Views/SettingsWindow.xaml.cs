@@ -17,15 +17,15 @@ using LogLevel = AnimeBingeDownloader.Models.LogLevel;
 
 namespace AnimeBingeDownloader.Views
 {
-    public partial class SettingsWindow : Window, INotifyPropertyChanged
+    public sealed partial class SettingsWindow : INotifyPropertyChanged
     {
         private readonly ConfigurationManager _configManager;
-        private bool _hasUnsavedChanges = false;
-        private bool _isLoading = false;
+        private bool _hasUnsavedChanges;
+        private bool _isLoading;
         private string _statusMessage = "Ready";
         private readonly DispatcherTimer _statusTimer;
         
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
         
         public string StatusMessage
         {
@@ -43,8 +43,8 @@ namespace AnimeBingeDownloader.Views
                 }
             }
         }
-        
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
@@ -85,8 +85,8 @@ namespace AnimeBingeDownloader.Views
                 
                 // Set version info
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                VersionTextBlock.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
-                
+                if (version != null) VersionTextBlock.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+
                 // Hide debug tab in release mode
                 #if !DEBUG
                 var debugTab = MainTabControl.Items.Cast<TabItem>().FirstOrDefault(t => t.Name == "DebugTab");
@@ -98,7 +98,7 @@ namespace AnimeBingeDownloader.Views
             }
             catch (Exception ex)
             {
-                AppLogger.AddLog($"Error initializing settings window: {ex.Message}");
+                AppLogger.Logger.Error($"Error initializing settings window: {ex.Message}");
                 StatusMessage = "Error initializing settings";
                 MessageBox.Show($"Error initializing settings: {ex.Message}", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
@@ -129,6 +129,27 @@ namespace AnimeBingeDownloader.Views
             // Optionally set a default selection
             DebugLogLevelComboBox.SelectedIndex = 0;
         }
+        private void InitializeBrowserSettingsComboBox()
+        {
+            // Clear existing items
+            BrowserTypeComboBox.Items.Clear();
+    
+            // Get all values from the BrowserType enum
+            var browserTypes = Enum.GetValues(typeof(BrowserType)).Cast<BrowserType>();
+    
+            // Add each browser type to the ComboBox
+            foreach (var type in browserTypes)
+            {
+                BrowserTypeComboBox.Items.Add(new ComboBoxItem
+                {
+                    Content = EnumTranslator.TranslateEnumToStr(type),
+                    Tag = type  // Store the enum value in the Tag property for easy access
+                });
+            }
+    
+            // Optionally set a default selection
+            BrowserTypeComboBox.SelectedIndex = 0;
+        }
         private void LoadSettings()
         {
             try
@@ -152,8 +173,22 @@ namespace AnimeBingeDownloader.Views
                 // Browser Settings
                 MinimizeBrowserCheckBox.IsChecked = _configManager.MinimizeBrowserWindow;
                 UserAgentTextBox.Text = _configManager.UserAgent;
-                PageLoadTimeoutTextBox.Text = _configManager.PageLoadTimeoutSeconds.ToString();
+                HeadlessModeCheckBox.IsChecked = _configManager.HeadlessMode;
+                DisableImagesCheckBox.IsChecked = _configManager.DisableImages;
+                DisableJavaScriptCheckBox.IsChecked = _configManager.DisableJavaScript;
+                UserDataDirTextBox.Text = _configManager.UserDataDir;
                 
+                // Set the selected browser type
+                foreach (ComboBoxItem item in BrowserTypeComboBox.Items)
+                {
+                    if (item.Tag is string browserType && 
+                        string.Equals(browserType, _configManager.BrowserType.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        BrowserTypeComboBox.SelectedItem = item;
+                        break;
+                    }
+                }
+                PageLoadTimeoutSlider.Value = _configManager.PageLoadTimeout;
                 // Logging Settings
                 LogFilePathTextBox.Text = _configManager.DefaulterLoggerFile;
                 // These settings don't exist in ConfigurationManager yet, so we'll use default values
@@ -187,7 +222,7 @@ namespace AnimeBingeDownloader.Views
             }
             catch (Exception ex)
             {
-                AppLogger.AddLog($"Error loading settings: {ex}");
+                AppLogger.Logger.Error($"Error loading settings: {ex}");
                 StatusMessage = "Error loading settings";
                 throw;
             }
@@ -201,51 +236,50 @@ namespace AnimeBingeDownloader.Views
         {
             try
             {
-                if (_isLoading) return;
+                _isLoading = true;
                 
                 // General Settings
-                _configManager.DefaultDownloadDirectory = DirectoryTextBox.Text;
+                _configManager.DefaultDownloadDirectory = DirectoryTextBox.Text.Trim();
                 _configManager.MaxConcurrentDownloads = (int)MaxDownloadsSlider.Value;
                 _configManager.MaxRetryAttempts = (int)MaxRetriesSlider.Value;
-                _configManager.MinTimeAfterError = (int)MinTimeAfterErrorSlider.Value;
-                
-                // Cache Settings
-                _configManager.CacheExpirationHours = (int)CacheExpirationSlider.Value;
                 
                 // Application Behavior
-                _configManager.AutoStartDownloads = AutoStartDownloadsCheckBox.IsChecked ?? true;
-                _configManager.ShowNotifications = ShowNotificationsCheckBox.IsChecked ?? true;
-                _configManager.PrintToScreen = PrintToScreenCheckBox.IsChecked ?? true;
+                _configManager.AutoStartDownloads = AutoStartDownloadsCheckBox.IsChecked ?? false;
+                _configManager.ShowNotifications = ShowNotificationsCheckBox.IsChecked ?? false;
+                _configManager.PrintToScreen = PrintToScreenCheckBox.IsChecked ?? false;
                 
                 // Browser Settings
-                _configManager.MinimizeBrowserWindow = MinimizeBrowserCheckBox.IsChecked ?? true;
+                _configManager.HeadlessMode = HeadlessModeCheckBox.IsChecked ?? false;
+                _configManager.DisableImages = DisableImagesCheckBox.IsChecked ?? false;
+                _configManager.DisableJavaScript = DisableJavaScriptCheckBox.IsChecked ?? false;
                 
-                if (int.TryParse(PageLoadTimeoutTextBox.Text, out var timeout))
+                // Set browser type from ComboBox
+                if (BrowserTypeComboBox.SelectedItem is ComboBoxItem selectedBrowserItem && 
+                    selectedBrowserItem.Tag is string browserTypeStr &&
+                    Enum.TryParse<BrowserType>(browserTypeStr, out var browserType))
                 {
-                    _configManager.PageLoadTimeoutSeconds = timeout;
+                    _configManager.BrowserType = browserType;
                 }
                 
-                _configManager.UserAgent = UserAgentTextBox.Text;
+                // Set page load timeout
+                
+                _configManager.PageLoadTimeout = (int)PageLoadTimeoutSlider.Value;
+                
+                
+                // User data directory
+                _configManager.UserDataDir = UserDataDirTextBox.Text.Trim();
                 
                 // Logging Settings
-                _configManager.DefaulterLoggerFile = LogFilePathTextBox.Text;
-                // These settings don't exist in ConfigurationManager yet, so we'll just log them
-                var enableFileLogging = EnableFileLoggingCheckBox.IsChecked ?? false;
-                var maxLogSizeMb = (int)MaxLogSizeSlider.Value;
-                
-                // Debug Settings - These don't exist in ConfigurationManager yet, just log them
-                var enableDebugMode = EnableDebugModeCheckBox.IsChecked ?? false;
-                var enableVerboseLogging = VerboseLoggingCheckBox.IsChecked ?? false;
-                
-                var logLevel = "Info";
-                if (DebugLogLevelComboBox.SelectedItem is ComboBoxItem selectedLevel)
+                _configManager.LogToFile = EnableFileLoggingCheckBox.IsChecked ?? false;
+                if (int.TryParse(MaxLogSizeLabel.Text, out int maxLogSize))
                 {
-                    logLevel = selectedLevel.Content?.ToString() ?? "Info";
+                    _configManager.MaxLogSizeMb = maxLogSize;
                 }
                 
-                // Log the debug settings since we can't save them yet
-                AppLogger.Logger.Info($"Debug settings changed - DebugMode: {enableDebugMode}, Verbose: {enableVerboseLogging}, LogLevel: {logLevel}, FileLogging: {enableFileLogging}, MaxLogSize: {maxLogSizeMb}MB");
+                // Save the configuration
+                _configManager.SaveConfiguration();
                 
+                // Update status
                 _hasUnsavedChanges = false;
                 StatusMessage = "Settings saved successfully";
                 
@@ -280,6 +314,27 @@ namespace AnimeBingeDownloader.Views
                 StatusMessage = "Error browsing for directory";
             }
         }
+        
+        private void BrowseUserDataDirButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new System.Windows.Forms.FolderBrowserDialog
+                {
+                    SelectedPath = UserDataDirTextBox.Text,
+                    Description = "Select directory for browser user data"
+                };
+
+                if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                UserDataDirTextBox.Text = dialog.SelectedPath;
+                SettingChanged(sender, e);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Logger.Error($"Error browsing for user data directory: {ex.Message}");
+                StatusMessage = "Error browsing for user data directory";
+            }
+        }
 
         private void MaxDownloadsSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -290,11 +345,9 @@ namespace AnimeBingeDownloader.Views
 
         private void MaxRetriesSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (MaxRetriesLabel != null && !_isLoading)
-            {
-                MaxRetriesLabel.Text = ((int)e.NewValue).ToString();
-                SettingChanged(sender, e);
-            }
+            if (MaxRetriesLabel == null || _isLoading) return;
+            MaxRetriesLabel.Text = ((int)e.NewValue).ToString();
+            SettingChanged(sender, e);
         }
 
         private void MinTimeAfterErrorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -317,11 +370,9 @@ namespace AnimeBingeDownloader.Views
         
         private void MaxLogSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (MaxLogSizeLabel != null && !_isLoading)
-            {
-                MaxLogSizeLabel.Text = $"{e.NewValue:0} MB";
-                SettingChanged(sender, e);
-            }
+            if (MaxLogSizeLabel == null || _isLoading) return;
+            MaxLogSizeLabel.Text = $"{e.NewValue:0} MB";
+            SettingChanged(sender, e);
         }
 
         private void SettingChanged(object sender, RoutedEventArgs e)
@@ -391,20 +442,18 @@ namespace AnimeBingeDownloader.Views
                 MessageBoxImage.Warning
             );
 
-            if (result == MessageBoxResult.Yes)
+            if (result != MessageBoxResult.Yes) return;
+            try
             {
-                try
-                {
-                    _configManager.ResetToDefaults();
-                    LoadSettings();
-                    _hasUnsavedChanges = true;
-                    StatusMessage = "Settings reset to defaults. Click Save to apply.";
-                }
-                catch (Exception ex)
-                {
-                    AppLogger.Logger.Error($"Error resetting settings: {ex.Message}");
-                    StatusMessage = "Error resetting settings";
-                }
+                _configManager.ResetToDefaults();
+                LoadSettings();
+                _hasUnsavedChanges = true;
+                StatusMessage = "Settings reset to defaults. Click Save to apply.";
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Logger.Error($"Error resetting settings: {ex.Message}");
+                StatusMessage = "Error resetting settings";
             }
         }
 
@@ -458,7 +507,7 @@ namespace AnimeBingeDownloader.Views
         {
             try
             {
-                // TODO: Implement test notification
+                NotificationService.Instance.ShowTestNotification();
                 StatusMessage = "Test notification sent";
             }
             catch (Exception ex)
@@ -505,24 +554,22 @@ namespace AnimeBingeDownloader.Views
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
-            if (result == MessageBoxResult.Yes)
+            if (result != MessageBoxResult.Yes) return;
+            try
             {
-                try
-                {
-                    // TODO: Implement full settings reset and application restart
-                    StatusMessage = "Settings reset complete. Restarting application...";
-                    MessageBox.Show("All settings have been reset to their default values. The application will now restart.",
-                        "Settings Reset", MessageBoxButton.OK, MessageBoxImage.Information);
+                // TODO: Implement full settings reset and application restart
+                StatusMessage = "Settings reset complete. Restarting application...";
+                MessageBox.Show("All settings have been reset to their default values. The application will now restart.",
+                    "Settings Reset", MessageBoxButton.OK, MessageBoxImage.Information);
                     
-                    // Restart the application
-                    // Application.Restart();
-                    // Environment.Exit(0);
-                }
-                catch (Exception ex)
-                {
-                    AppLogger.Logger.Error($"Error resetting settings: {ex.Message}");
-                    StatusMessage = "Error resetting settings";
-                }
+                // Restart the application
+                // Application.Restart();
+                // Environment.Exit(0);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Logger.Error($"Error resetting settings: {ex.Message}");
+                StatusMessage = "Error resetting settings";
             }
         }
         
@@ -538,7 +585,7 @@ namespace AnimeBingeDownloader.Views
                 _isLoading = true;
                 if (saveButton != null)
                     saveButton.IsEnabled = false;
-
+                SaveSettings();
                 // Save configuration asynchronously
                 await Task.Run(() => _configManager.SaveConfiguration());
 

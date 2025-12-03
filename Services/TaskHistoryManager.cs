@@ -45,11 +45,11 @@ public class TaskHistoryManager
         var filePath = AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
         if (!File.Exists(filePath))
         {
-            Logger.AddLog($"No history file found at {filePath}");
+            Logger.Warning($"No history file found at {filePath}");
             return;
         }
         File.Delete(filePath);
-        Logger.AddLog("Removed old history");
+        Logger.Info("Removed old history");
 
     }
 
@@ -57,58 +57,83 @@ public class TaskHistoryManager
     {
         if (_history.Remove(entryId))
         {
-            Logger.AddLog($"Removed entry {entryId}");
+            Logger.Info($"Removed entry {entryId}");
             return true;
         }
-        Logger.AddLog("No task found with id " + entryId);
+        Logger.Warning("No task found with id " + entryId);
         return false;
 
     }
 
-    private void LoadHistory(string? filePath)
+    private void LoadHistory(string? filePath = null)
     {
         try
         {
             filePath ??= AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
-            Logger.AddLog($"Loading history from: {filePath}");
+            Logger.Info($"Loading history from: {filePath}");
             
+            // Ensure directory exists
+            var directory = Path.GetDirectoryName(filePath);
+            if (directory == null)
+            {
+                Logger.Error("Invalid file path for history");
+                return;
+            }
+
+            // Create directory if it doesn't exist
+            try
+            {
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                    Logger.Info($"Created directory: {directory}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error creating directory {directory}: {ex.Message}");
+                return;
+            }
+
             if (!File.Exists(filePath))
             {
-                Logger.AddLog($"No history file found at {filePath}");
+                Logger.Info($"No history file found at {filePath}, starting with empty history");
+                _history.Clear();
                 return;
             }
 
-            var jsonOptions = new JsonSerializerOptions
+            try
             {
-                PropertyNameCaseInsensitive = true,
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            };
+                var jsonContent = File.ReadAllText(filePath);
+                var historyEntries = JsonSerializer.Deserialize<Dictionary<string, TaskHistoryEntry>>(jsonContent);
 
-            var jsonString = File.ReadAllText(filePath);
-            var historyEntries = JsonSerializer.Deserialize<Dictionary<string, TaskHistoryEntry>>(jsonString, jsonOptions);
+                if (historyEntries == null || historyEntries.Count == 0)
+                {
+                    Logger.Info("History file is empty");
+                    _history.Clear();
+                    return;
+                }
 
-            if (historyEntries == null || historyEntries.Count == 0)
-            {
-                Logger.AddLog("No valid history data found in the file");
-                return;
-            }
-
-            _history.Clear();
-            foreach (var entry in historyEntries)
-            {
-                if (entry.Value != null && !string.IsNullOrEmpty(entry.Key))
+                // Clear existing history and add new entries
+                _history.Clear();
+                foreach (var entry in historyEntries.Where(entry => !string.IsNullOrEmpty(entry.Key)))
                 {
                     _history[entry.Key] = entry.Value;
                 }
+                
+                Logger.Info($"Successfully loaded {_history.Count} history entries");
             }
-            
-            Logger.AddLog($"Successfully loaded {_history.Count} history entries");
+            catch (Exception ex)
+            {
+                Logger.Error($"Error reading history file: {ex.Message}");
+                // Continue with empty history
+                _history.Clear();
+            }
         }
         catch (Exception ex)
         {
-            Logger.AddLog($"Error loading history: {ex.Message}");
-            // Optionally rethrow or handle the error as needed
+            Logger.Error($"Error in LoadHistory: {ex.Message}");
+            _history.Clear();
         }
     }
     public void SaveTask(TaskViewModel task)
@@ -122,32 +147,73 @@ public class TaskHistoryManager
     {
         if (!_updatedFlag) return;
         
+        string? tempFile = null;
+        string? targetFile = null;
+        
         try
         {
-            var path = AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
-            var directory = Path.GetDirectoryName(path);
+            targetFile = AppStorageService.GetPath(ConfigurationManager.Instance.DefaulterHistoryFIle);
+            var directory = Path.GetDirectoryName(targetFile);
             
-            // Ensure directory exists
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            if (string.IsNullOrEmpty(directory))
             {
-                Directory.CreateDirectory(directory);
+                Logger.Error("Invalid directory path for history file");
+                return;
             }
 
+            // Ensure directory exists
+            try
+            {
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                    Logger.Info($"Created directory: {directory}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error creating directory {directory}: {ex.Message}");
+                return;
+            }
+
+            // Create a temporary file first
+            tempFile = Path.Combine(directory, Path.GetRandomFileName());
+            
             var jsonOptions = new JsonSerializerOptions
             {
                 WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             };
             
+            // Serialize to memory first to avoid partial writes
             var jsonString = JsonSerializer.Serialize(_history, jsonOptions);
-            File.WriteAllText(path, jsonString);
+            
+            // Write to temp file
+            File.WriteAllText(tempFile, jsonString);
+            
+            // Now that we've successfully written the temp file, move it to the target location
+            if (File.Exists(targetFile))
+            {
+                // On Windows, we need to delete the target file first if it exists
+                File.Delete(targetFile);
+            }
+            
+            File.Move(tempFile, targetFile);
             
             _updatedFlag = false;
-            Logger.AddLog($"History saved to {path}");
+            Logger.Info($"History saved to {targetFile}");
         }
         catch (Exception ex)
         {
-            Logger.AddLog($"Error saving history: {ex.Message}");
+            Logger.Error($"Error saving history to {targetFile ?? "unknown location"}: {ex.Message}");
+            
+            // Clean up temp file if it exists
+            if (tempFile != null && File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); }
+                catch { /* Ignore cleanup errors */ }
+            }
         }
     }
 
@@ -163,11 +229,12 @@ public class TaskHistoryManager
             
             var jsonString = JsonSerializer.Serialize(_history, jsonOptions);
             File.WriteAllText(filePath, jsonString);
-            Logger.AddLog($"History exported to {filePath}");
+            Logger.Info($"History exported to {filePath}");
+            //TODO add here notification
         }
         catch (Exception ex)
         {
-            Logger.AddLog($"Error exporting history: {ex.Message}");
+            Logger.Error($"Error exporting history: {ex.Message}");
             throw; // Re-throw to allow caller to handle the error
         }
     }
