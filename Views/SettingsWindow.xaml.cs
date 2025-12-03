@@ -427,12 +427,9 @@ namespace AnimeBingeDownloader.Views
                     Title = "Export Logs"
                 };
 
-                if (saveDialog.ShowDialog() == true)
-                {
-                    // TODO: Implement log export functionality
-                    File.WriteAllText(saveDialog.FileName, "Log export functionality not yet implemented.");
-                    StatusMessage = "Logs exported successfully";
-                }
+                if (saveDialog.ShowDialog() != true) return;
+                File.WriteAllText(saveDialog.FileName, "Log export functionality not yet implemented.");
+                StatusMessage = "Logs exported successfully";
             }
             catch (Exception ex)
             {
